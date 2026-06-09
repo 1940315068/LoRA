@@ -161,3 +161,24 @@ To summarize selected methods and ranks:
 ```bash
 python -m src.summarize_results --methods lora qlora --ranks 16 64
 ```
+
+## Effective Rank Analysis
+
+Compute effective ranks of trained LoRA / QLoRA adapters:
+
+```bash
+python -m src.compute_effective_rank --adapter src/outputs/qwen3_1p7b/lora_r64/adapter
+python -m src.compute_effective_rank --adapter src/outputs/qwen3_1p7b/qlora_r64/adapter
+```
+
+Summarize all effective rank results:
+
+```bash
+python -m src.summarize_effective_rank
+```
+
+This creates:
+
+```text
+src/outputs/qwen3_1p7b/effective_rank_summary.csv
+```
