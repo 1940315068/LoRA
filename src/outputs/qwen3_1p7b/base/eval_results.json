@@ -1,0 +1,15 @@
+{
+  "experiment_name": "qwen3_1p7b_base",
+  "model_type": "base",
+  "adapter": null,
+  "num_eval_samples": 400,
+  "correct": 16,
+  "accuracy": 0.04,
+  "eval_runtime": 1370.7273054122925,
+  "eval_samples_per_second": 0.2918158837433289,
+  "avg_generation_time_per_sample": 3.4268182635307314,
+  "peak_gpu_memory_gb": 3.2445197105407715,
+  "max_new_tokens": 128,
+  "do_sample": false,
+  "temperature": 0.0
+}

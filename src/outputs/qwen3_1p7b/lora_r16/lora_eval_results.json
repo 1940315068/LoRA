@@ -1,0 +1,15 @@
+{
+  "experiment_name": "qwen3_1p7b_lora_r16",
+  "model_type": "lora",
+  "adapter": "src/outputs/qwen3_1p7b/lora_r16/adapter",
+  "num_eval_samples": 400,
+  "correct": 91,
+  "accuracy": 0.2275,
+  "eval_runtime": 2015.335348367691,
+  "eval_samples_per_second": 0.19847813433331463,
+  "avg_generation_time_per_sample": 5.038338370919227,
+  "peak_gpu_memory_gb": 3.2684454917907715,
+  "max_new_tokens": 128,
+  "do_sample": false,
+  "temperature": 0.0
+}

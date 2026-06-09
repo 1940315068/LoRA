@@ -1,0 +1,85 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.ipynb_checkpoints/
+
+# =========================
+# Virtual environments
+# =========================
+.env
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# System files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Hugging Face / cache
+# =========================
+.cache/
+huggingface/
+hf_cache/
+models/
+datasets/
+
+# =========================
+# Weights & checkpoints
+# =========================
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+# =========================
+# Experiment outputs
+# Keep small JSON/YAML result files if needed,
+# but ignore large adapters/checkpoints/prediction dumps.
+# =========================
+src/outputs/**/adapter/
+src/outputs/**/checkpoint*/
+src/outputs/**/*.jsonl
+src/outputs/**/all_results.json
+
+
+# =========================
+# W&B / experiment trackers
+# =========================
+wandb/
+runs/
+mlruns/
+
+# =========================
+# Documents build artifacts
+# =========================
+documents/**/*.aux
+documents/**/*.bbl
+documents/**/*.blg
+documents/**/*.log
+documents/**/*.out
+documents/**/*.toc
+documents/**/*.synctex.gz
+documents/**/*.fdb_latexmk
+documents/**/*.fls
