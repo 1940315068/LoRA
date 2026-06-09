@@ -61,15 +61,18 @@ def collect_base_result(output_root: str) -> Optional[Dict[str, Any]]:
     return row
 
 
-def collect_lora_result(output_root: str, rank: int) -> Dict[str, Any]:
+def collect_method_result(output_root: str, method: str, rank: int) -> Dict[str, Any]:
     """
-    Collect LoRA training and evaluation result for one rank.
+    Collect result for one method and one rank.
 
-    Expected paths:
-        src/outputs/qwen3_1p7b/lora_r{rank}/train_results.json
-        src/outputs/qwen3_1p7b/lora_r{rank}/lora_eval_results.json
+    Expected:
+        src/outputs/qwen3_1p7b/lora_r16/train_results.json
+        src/outputs/qwen3_1p7b/lora_r16/lora_eval_results.json
+
+        src/outputs/qwen3_1p7b/qlora_r16/train_results.json
+        src/outputs/qwen3_1p7b/qlora_r16/lora_eval_results.json
     """
-    exp_dir = os.path.join(output_root, f"lora_r{rank}")
+    exp_dir = os.path.join(output_root, f"{method}_r{rank}")
 
     train_path = os.path.join(exp_dir, "train_results.json")
     eval_path = os.path.join(exp_dir, "lora_eval_results.json")
@@ -78,7 +81,7 @@ def collect_lora_result(output_root: str, rank: int) -> Dict[str, Any]:
     eval_result = load_json(eval_path)
 
     row = {
-        "method": "lora",
+        "method": method,
         "rank": rank,
         "accuracy": safe_get(eval_result, "accuracy"),
         "correct": safe_get(eval_result, "correct"),
@@ -130,6 +133,12 @@ def save_csv(rows: List[Dict[str, Any]], output_path: str) -> None:
             writer.writerow(row)
 
 
+def format_float(value, digits: int = 4) -> str:
+    if isinstance(value, float):
+        return f"{value:.{digits}f}"
+    return "" if value is None else str(value)
+
+
 def print_table(rows: List[Dict[str, Any]]) -> None:
     """
     Print a compact summary table in terminal.
@@ -149,38 +158,16 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
     print("-" * 120)
 
     for row in rows:
-        method = row["method"]
-        rank = row["rank"]
-
-        accuracy = row["accuracy"]
-        train_loss = row["train_loss"]
-        train_runtime = row["train_runtime"]
-        eval_runtime = row["eval_runtime"]
-        train_mem = row["train_peak_gpu_memory_gb"]
-        eval_mem = row["eval_peak_gpu_memory_gb"]
-        trainable_params = row["trainable_params"]
-
-        accuracy_str = f"{accuracy:.4f}" if isinstance(accuracy, float) else ""
-        train_loss_str = f"{train_loss:.4f}" if isinstance(train_loss, float) else ""
-        train_runtime_str = (
-            f"{train_runtime:.1f}" if isinstance(train_runtime, float) else ""
-        )
-        eval_runtime_str = (
-            f"{eval_runtime:.1f}" if isinstance(eval_runtime, float) else ""
-        )
-        train_mem_str = f"{train_mem:.2f}" if isinstance(train_mem, float) else ""
-        eval_mem_str = f"{eval_mem:.2f}" if isinstance(eval_mem, float) else ""
-
         print(
-            f"{method:<8} "
-            f"{str(rank):<6} "
-            f"{accuracy_str:<10} "
-            f"{train_loss_str:<12} "
-            f"{train_runtime_str:<12} "
-            f"{eval_runtime_str:<12} "
-            f"{train_mem_str:<12} "
-            f"{eval_mem_str:<12} "
-            f"{str(trainable_params):<16}"
+            f"{row['method']:<8} "
+            f"{str(row['rank']):<6} "
+            f"{format_float(row['accuracy']):<10} "
+            f"{format_float(row['train_loss']):<12} "
+            f"{format_float(row['train_runtime'], 1):<12} "
+            f"{format_float(row['eval_runtime'], 1):<12} "
+            f"{format_float(row['train_peak_gpu_memory_gb'], 2):<12} "
+            f"{format_float(row['eval_peak_gpu_memory_gb'], 2):<12} "
+            f"{str(row['trainable_params']):<16}"
         )
 
     print("=" * 120)
@@ -195,11 +182,18 @@ def main():
         help="Root output directory for one base model.",
     )
     parser.add_argument(
+        "--methods",
+        type=str,
+        nargs="+",
+        default=["lora", "qlora"],
+        help="Methods to summarize.",
+    )
+    parser.add_argument(
         "--ranks",
         type=int,
         nargs="+",
         default=[4, 8, 16, 32, 64],
-        help="LoRA ranks to summarize.",
+        help="Ranks to summarize.",
     )
     parser.add_argument(
         "--output_csv",
@@ -226,9 +220,10 @@ def main():
         if base_row is not None:
             rows.append(base_row)
 
-    for rank in args.ranks:
-        row = collect_lora_result(args.output_root, rank)
-        rows.append(row)
+    for method in args.methods:
+        for rank in args.ranks:
+            row = collect_method_result(args.output_root, method, rank)
+            rows.append(row)
 
     save_csv(rows, output_csv)
     print_table(rows)

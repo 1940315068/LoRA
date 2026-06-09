@@ -1,6 +1,11 @@
 from typing import Dict
 
-from peft import LoraConfig, TaskType, get_peft_model
+from peft import (
+    LoraConfig,
+    TaskType,
+    get_peft_model,
+    prepare_model_for_kbit_training,
+)
 
 
 def build_lora_config(config: Dict) -> LoraConfig:
@@ -23,6 +28,15 @@ def apply_lora(model, config: Dict):
     """
     Attach LoRA adapters to the base model.
     """
+    quant_cfg = config.get("quantization", {})
+    load_in_4bit = quant_cfg.get("load_in_4bit", False)
+
+    if load_in_4bit:
+        model = prepare_model_for_kbit_training(
+            model,
+            gradient_checkpointing_kwargs={"use_reentrant": False},
+        )
+
     lora_config = build_lora_config(config)
     model = get_peft_model(model, lora_config)
 

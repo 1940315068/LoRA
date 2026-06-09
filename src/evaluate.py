@@ -10,7 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.utils.dataset_utils import load_gsm8k_for_eval
 from src.utils.io_utils import ensure_dir, load_yaml, save_json, apply_lora_rank_override
-from src.utils.model_utils import get_torch_dtype
+from src.utils.model_utils import get_torch_dtype, load_base_model, load_tokenizer
 from src.utils.eval_utils import (
     is_correct,
     extract_final_number,
@@ -27,31 +27,10 @@ def get_model_device(model):
 
 
 def load_model_for_eval(config, adapter_path: str = None):
-    """
-    Load base model. If adapter_path is provided, attach LoRA adapter.
-    """
-    model_name = config["model"]["model_name"]
-    dtype_name = config["model"].get("torch_dtype", "bfloat16")
-    trust_remote_code = config["model"].get("trust_remote_code", True)
-
-    torch_dtype = get_torch_dtype(dtype_name)
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name,
-        trust_remote_code=trust_remote_code,
-    )
-
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
+    tokenizer = load_tokenizer(config)
     tokenizer.padding_side = "left"
 
-    base_model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch_dtype,
-        device_map="auto",
-        trust_remote_code=trust_remote_code,
-    )
+    base_model = load_base_model(config)
 
     if adapter_path is not None:
         model = PeftModel.from_pretrained(base_model, adapter_path)
@@ -175,6 +154,11 @@ def main():
 
     config = load_yaml(args.config)
     config = apply_lora_rank_override(config, rank=args.rank)   
+    if args.adapter is None and args.rank is not None:
+        args.adapter = os.path.join(
+            config["training"]["output_dir"],
+            "adapter",
+        )
     if args.adapter is None:
         config["experiment_name"] = f"{config['model']['model_short_name']}_base"
 

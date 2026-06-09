@@ -1,7 +1,7 @@
 from typing import Dict, Tuple
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
 def get_torch_dtype(dtype_name: str):
@@ -16,6 +16,27 @@ def get_torch_dtype(dtype_name: str):
         return torch.float32
 
     raise ValueError(f"Unsupported torch dtype: {dtype_name}")
+
+
+def build_quantization_config(config: Dict):
+    quant_cfg = config.get("quantization", {})
+    load_in_4bit = quant_cfg.get("load_in_4bit", False)
+
+    if not load_in_4bit:
+        return None
+
+    compute_dtype = get_torch_dtype(
+        quant_cfg.get("bnb_4bit_compute_dtype", "bfloat16")
+    )
+
+    return BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type=quant_cfg.get("bnb_4bit_quant_type", "nf4"),
+        bnb_4bit_compute_dtype=compute_dtype,
+        bnb_4bit_use_double_quant=quant_cfg.get(
+            "bnb_4bit_use_double_quant", True
+        ),
+    )
 
 
 def load_tokenizer(config: Dict):
@@ -40,20 +61,36 @@ def load_tokenizer(config: Dict):
 
 def load_base_model(config: Dict):
     """
-    Load the full-precision or bf16 base model for LoRA fine-tuning.
+    Load the base model for LoRA fine-tuning.
     """
     model_name = config["model"]["model_name"]
     dtype_name = config["model"].get("torch_dtype", "bfloat16")
     trust_remote_code = config["model"].get("trust_remote_code", True)
 
     torch_dtype = get_torch_dtype(dtype_name)
+    quantization_config = build_quantization_config(config)
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch_dtype,
-        device_map="auto",
-        trust_remote_code=trust_remote_code,
-    )
+    if quantization_config is not None:
+        if torch.cuda.is_available():
+            device_map = {"": torch.cuda.current_device()}
+        else:
+            device_map = None
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            quantization_config=quantization_config,
+            device_map=device_map,
+            trust_remote_code=trust_remote_code,
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch_dtype,
+            device_map="auto",
+            trust_remote_code=trust_remote_code,
+        )
+
+    model.config.use_cache = False
 
     return model
 
