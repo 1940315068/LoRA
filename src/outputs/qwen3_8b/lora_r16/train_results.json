@@ -1,0 +1,13 @@
+{
+    "epoch": 2.0,
+    "manual_train_runtime": 865.9604387283325,
+    "peak_memory_gb": 20.364997386932373,
+    "total_flos": 3.47797942699008e+16,
+    "total_params": 8206070784,
+    "train_loss": 0.501960376739502,
+    "train_runtime": 865.6936,
+    "train_samples_per_second": 4.621,
+    "train_steps_per_second": 0.578,
+    "trainable_params": 15335424,
+    "trainable_ratio": 0.0018687901193712151
+}

@@ -1,0 +1,15 @@
+{
+  "experiment_name": "qwen3_8b_lora_r32",
+  "model_type": "lora",
+  "adapter": "src/outputs/qwen3_8b/lora_r32/adapter",
+  "num_eval_samples": 400,
+  "correct": 101,
+  "accuracy": 0.2525,
+  "eval_runtime": 2573.231119632721,
+  "eval_samples_per_second": 0.1554465889006862,
+  "avg_generation_time_per_sample": 6.433077799081802,
+  "peak_gpu_memory_gb": 15.420812129974365,
+  "max_new_tokens": 128,
+  "do_sample": false,
+  "temperature": 0.0
+}
