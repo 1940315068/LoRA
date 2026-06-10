@@ -10,11 +10,17 @@ Current stage: **LoRA and QLoRA rank sweep on Qwen3-1.7B with GSM8K**.
 src/
   train.py                  # train LoRA / QLoRA adapters
   evaluate.py               # evaluate base model or trained adapters
+  compute_effective_rank.py 
   summarize_results.py      # collect train/eval results into one CSV
+  summarize_rank.py
+  run_exps.sh               # train + evaluate
+  run_rank_analysis.sh      # compute + summarize effective rank
 
   configs/
     lora_qwen3_1p7b.yaml    # shared config for LoRA experiments
     qlora_qwen3_1p7b.yaml   # shared config for QLoRA experiments
+    lora_qwen3_4b.yaml
+    qlora_qwen3_4b.yaml
 
   utils/
     dataset_utils.py        # load and format GSM8K
@@ -22,6 +28,7 @@ src/
     lora_utils.py           # LoRA / QLoRA setup and parameter counting
     eval_utils.py           # answer extraction, accuracy, GPU memory utils
     io_utils.py             # YAML/JSON helpers and config override
+    rank_analysis_utils.py  
 
   outputs/
     qwen3_1p7b/
@@ -64,6 +71,13 @@ The adapter and training metrics will be saved to:
 ```text
 src/outputs/qwen3_1p7b/lora_r16/
 src/outputs/qwen3_1p7b/qlora_r16/
+```
+
+To run the same experiments on Qwen3-4B, use the 4B config files:
+
+```bash
+python -m src.train --config src/configs/lora_qwen3_4b.yaml --rank 16
+python -m src.train --config src/configs/qlora_qwen3_4b.yaml --rank 16
 ```
 
 ## Evaluate Base Model
@@ -130,6 +144,15 @@ Repeat with ranks:
 4, 8, 16, 32, 64
 ```
 
+Alternatively, run training and evaluation in batch:
+
+```bash
+bash src/run_exps.sh \
+  --models qwen3_1p7b qwen3_4b \
+  --methods lora qlora \
+  --ranks 4 8 16 32 64
+```
+
 ## Summarize Results
 
 ```bash
@@ -162,6 +185,12 @@ To summarize selected methods and ranks:
 python -m src.summarize_results --methods lora qlora --ranks 16 64
 ```
 
+For Qwen3-4B results:
+
+```bash
+python -m src.summarize_results --output_root src/outputs/qwen3_4b
+```
+
 ## Effective Rank Analysis
 
 Compute effective ranks of trained LoRA / QLoRA adapters:
@@ -174,11 +203,26 @@ python -m src.compute_effective_rank --adapter src/outputs/qwen3_1p7b/qlora_r64/
 Summarize all effective rank results:
 
 ```bash
-python -m src.summarize_effective_rank
+python -m src.summarize_rank
 ```
 
 This creates:
 
 ```text
 src/outputs/qwen3_1p7b/effective_rank_summary.csv
+```
+
+For Qwen3-4B effective rank results:
+
+```bash
+python -m src.summarize_rank --output_root src/outputs/qwen3_4b
+```
+
+Alternatively, run effective rank analysis in batch:
+
+```bash
+bash src/run_rank_analysis.sh \
+  --models qwen3_4b \
+  --methods lora qlora \
+  --ranks 4 8 16 32 64
 ```

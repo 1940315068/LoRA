@@ -1,0 +1,15 @@
+{
+  "experiment_name": "qwen3_4b_qlora_r4",
+  "model_type": "lora",
+  "adapter": "src/outputs/qwen3_4b/qlora_r4/adapter",
+  "num_eval_samples": 400,
+  "correct": 97,
+  "accuracy": 0.2425,
+  "eval_runtime": 4111.838227510452,
+  "eval_samples_per_second": 0.09728009174188339,
+  "avg_generation_time_per_sample": 10.27959556877613,
+  "peak_gpu_memory_gb": 2.627018928527832,
+  "max_new_tokens": 128,
+  "do_sample": false,
+  "temperature": 0.0
+}
