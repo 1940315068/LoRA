@@ -1,13 +1,13 @@
 {
     "epoch": 2.0,
-    "manual_train_runtime": 3775.426769018173,
-    "peak_memory_gb": 5.115962028503418,
-    "total_flos": 3.325437451049165e+16,
+    "manual_train_runtime": 1808.6647164821625,
+    "peak_memory_gb": 5.115963459014893,
+    "total_flos": 1.66771740489216e+16,
     "total_params": 2208759296,
-    "train_loss": 0.6108323616981506,
-    "train_runtime": 3775.2402,
-    "train_samples_per_second": 2.119,
-    "train_steps_per_second": 0.265,
+    "train_loss": 0.6433834171295166,
+    "train_runtime": 1808.4522,
+    "train_samples_per_second": 2.212,
+    "train_steps_per_second": 0.276,
     "trainable_params": 2949120,
     "trainable_ratio": 0.0013351930223183541
 }
