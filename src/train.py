@@ -5,17 +5,66 @@ from typing import Dict
 import time
 
 import numpy as np
+from src.utils.dataset_utils import load_gsm8k_for_sft
 import torch
 from transformers import (
     DataCollatorForLanguageModeling,
+    TrainerCallback,
     Trainer,
     TrainingArguments,
 )
 
-from src.utils.dataset_utils import load_gsm8k_for_sft
 from src.utils.io_utils import ensure_dir, load_yaml, save_yaml, apply_lora_rank_override
 from src.utils.lora_utils import apply_lora, print_trainable_parameters, get_trainable_parameter_info
 from src.utils.model_utils import load_model_and_tokenizer
+
+
+class AdaLoraUpdateCallback(TrainerCallback):
+    """
+    Update AdaLoRA rank allocation during training steps.
+    """
+
+    def on_pre_optimizer_step(self, args, state, control, model=None, **kwargs):
+        if model is None:
+            return control
+
+        base_model = getattr(model, "base_model", None)
+        updater = getattr(base_model, "update_and_allocate", None)
+
+        if callable(updater):
+            updater(int(state.global_step))
+
+        return control
+
+
+def maybe_set_adalora_total_step(model, trainer, config: Dict) -> None:
+    """
+    Set AdaLoRA total steps using Trainer computed max_steps if needed.
+    """
+    method = config.get("experiment", {}).get("method", "lora")
+    if method != "adalora":
+        return
+
+    peft_config = getattr(model, "peft_config", None)
+    if peft_config is None:
+        return
+
+    default_cfg = peft_config.get("default")
+    if default_cfg is None:
+        return
+
+    total_step = int(getattr(default_cfg, "total_step", 0) or 0)
+    if total_step <= 1:
+        default_cfg.total_step = int(trainer.state.max_steps)
+
+
+def maybe_add_adalora_callback(trainer: Trainer, config: Dict) -> None:
+    """
+    Register AdaLoRA update callback only when method is adalora.
+    """
+    method = config.get("experiment", {}).get("method", "lora")
+    if method == "adalora":
+        trainer.add_callback(AdaLoraUpdateCallback())
 
 def set_seed(seed: int) -> None:
     """
@@ -138,6 +187,9 @@ def main():
         data_collator=data_collator,
         processing_class=tokenizer,
     )
+
+    maybe_set_adalora_total_step(model, trainer, config)
+    maybe_add_adalora_callback(trainer, config)
 
     print("Starting training...")
 

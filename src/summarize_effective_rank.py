@@ -183,7 +183,7 @@ def main():
         "--methods",
         type=str,
         nargs="+",
-        default=["lora", "qlora"],
+        default=["lora", "qlora", "adalora"],
     )
 
     parser.add_argument(

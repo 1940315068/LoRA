@@ -1,8 +1,8 @@
 # LoRA / QLoRA Rank Allocation Project
 
-This project studies LoRA and QLoRA fine-tuning, and later explores quantization-error-guided LoRA rank allocation.
+This project studies LoRA, QLoRA, and AdaLoRA fine-tuning, and later explores quantization-error-guided LoRA rank allocation.
 
-Current stage: **LoRA and QLoRA rank sweep on Qwen3-1.7B with GSM8K**.
+Current stage: **LoRA / QLoRA / AdaLoRA rank sweep on Qwen3-1.7B with GSM8K**.
 
 ## Project Structure
 
@@ -10,11 +10,13 @@ Current stage: **LoRA and QLoRA rank sweep on Qwen3-1.7B with GSM8K**.
 src/
   train.py                  # train LoRA / QLoRA adapters
   evaluate.py               # evaluate base model or trained adapters
+  run_rank_sweep.py         # run rank sweep across methods
   summarize_results.py      # collect train/eval results into one CSV
 
   configs/
     lora_qwen3_1p7b.yaml    # shared config for LoRA experiments
     qlora_qwen3_1p7b.yaml   # shared config for QLoRA experiments
+    adalora_qwen3_1p7b.yaml # shared config for AdaLoRA experiments
 
   utils/
     dataset_utils.py        # load and format GSM8K
@@ -43,7 +45,7 @@ conda activate lora
 pip install -r requirements.txt
 ```
 
-## Train LoRA / QLoRA
+## Train LoRA / QLoRA / AdaLoRA
 
 Use the shared config and override the rank from the command line.
 
@@ -59,11 +61,18 @@ QLoRA:
 python -m src.train --config src/configs/qlora_qwen3_1p7b.yaml --rank 16
 ```
 
+AdaLoRA:
+
+```bash
+python -m src.train --config src/configs/adalora_qwen3_1p7b.yaml --rank 16
+```
+
 The adapter and training metrics will be saved to:
 
 ```text
 src/outputs/qwen3_1p7b/lora_r16/
 src/outputs/qwen3_1p7b/qlora_r16/
+src/outputs/qwen3_1p7b/adalora_r16/
 ```
 
 ## Evaluate Base Model
@@ -86,7 +95,7 @@ If the result already exists, evaluation is skipped. To rerun:
 python -m src.evaluate --config src/configs/lora_qwen3_1p7b.yaml --overwrite
 ```
 
-## Evaluate LoRA / QLoRA Adapter
+## Evaluate LoRA / QLoRA / AdaLoRA Adapter
 
 If `--rank` is provided, the adapter path is inferred automatically.
 
@@ -102,11 +111,18 @@ QLoRA:
 python -m src.evaluate --config src/configs/qlora_qwen3_1p7b.yaml --rank 16
 ```
 
+AdaLoRA:
+
+```bash
+python -m src.evaluate --config src/configs/adalora_qwen3_1p7b.yaml --rank 16
+```
+
 Results are saved to:
 
 ```text
 src/outputs/qwen3_1p7b/lora_r16/lora_eval_results.json
 src/outputs/qwen3_1p7b/qlora_r16/lora_eval_results.json
+src/outputs/qwen3_1p7b/adalora_r16/lora_eval_results.json
 ```
 
 ## Rank Sweep
@@ -124,10 +140,23 @@ python -m src.train --config src/configs/qlora_qwen3_1p7b.yaml --rank 4
 python -m src.evaluate --config src/configs/qlora_qwen3_1p7b.yaml --rank 4
 ```
 
+Example for AdaLoRA:
+
+```bash
+python -m src.train --config src/configs/adalora_qwen3_1p7b.yaml --rank 4
+python -m src.evaluate --config src/configs/adalora_qwen3_1p7b.yaml --rank 4
+```
+
 Repeat with ranks:
 
 ```text
 4, 8, 16, 32, 64
+```
+
+Or run all methods and ranks in one command:
+
+```bash
+python -m src.run_rank_sweep --methods lora qlora adalora --ranks 4 8 16 32 64
 ```
 
 ## Summarize Results
@@ -135,7 +164,7 @@ Repeat with ranks:
 ```bash
 python -m src.summarize_results
 ```
-By default, this summarizes both LoRA and QLoRA results.
+By default, this summarizes LoRA, QLoRA, and AdaLoRA results.
 
 This creates:
 
@@ -154,12 +183,13 @@ To summarize only selected methods:
 ```bash
 python -m src.summarize_results --methods lora
 python -m src.summarize_results --methods qlora
+python -m src.summarize_results --methods adalora
 ```
 
 To summarize selected methods and ranks:
 
 ```bash
-python -m src.summarize_results --methods lora qlora --ranks 16 64
+python -m src.summarize_results --methods lora qlora adalora --ranks 16 64
 ```
 
 ## Effective Rank Analysis

@@ -3,12 +3,11 @@ import json
 import os
 import time
 
+from src.utils.dataset_utils import load_gsm8k_for_eval
 import torch
-from peft import PeftModel
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from src.utils.dataset_utils import load_gsm8k_for_eval
 from src.utils.io_utils import ensure_dir, load_yaml, save_json, apply_lora_rank_override
 from src.utils.model_utils import get_torch_dtype, load_base_model, load_tokenizer
 from src.utils.eval_utils import (
@@ -33,6 +32,9 @@ def load_model_for_eval(config, adapter_path: str = None):
     base_model = load_base_model(config)
 
     if adapter_path is not None:
+        # Import lazily to avoid Windows import-order crashes with datasets.
+        from peft import PeftModel
+
         model = PeftModel.from_pretrained(base_model, adapter_path)
     else:
         model = base_model

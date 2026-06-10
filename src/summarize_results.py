@@ -185,7 +185,7 @@ def main():
         "--methods",
         type=str,
         nargs="+",
-        default=["lora", "qlora"],
+        default=["lora", "qlora", "adalora"],
         help="Methods to summarize.",
     )
     parser.add_argument(
