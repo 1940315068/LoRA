@@ -9,7 +9,15 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.utils.dataset_utils import load_gsm8k_for_eval
-from src.utils.io_utils import ensure_dir, load_yaml, save_json, apply_lora_rank_override
+from src.utils.io_utils import (
+    ensure_dir,
+    load_yaml,
+    save_yaml,
+    save_json,
+    apply_model_override,
+    apply_method_override,
+    apply_lora_rank_override,
+)
 from src.utils.model_utils import get_torch_dtype, load_base_model, load_tokenizer
 from src.utils.eval_utils import (
     is_correct,
@@ -150,10 +158,26 @@ def main():
         default=None,
         help="Override LoRA rank r.",
     )
+    parser.add_argument(
+        "--model_key",
+        type=str,
+        default=None,
+        help="Model key, e.g., qwen3_1p7b, qwen3_4b, qwen3_8b.",
+    )
+
+    parser.add_argument(
+        "--method",
+        type=str,
+        default=None,
+        choices=["lora", "qlora"],
+        help="Evaluation method.",
+    )
     args = parser.parse_args()
 
     config = load_yaml(args.config)
-    config = apply_lora_rank_override(config, rank=args.rank)   
+    config = apply_model_override(config, model_key=args.model_key)
+    config = apply_method_override(config, method=args.method)
+    config = apply_lora_rank_override(config, rank=args.rank)
     if args.adapter is None and args.rank is not None:
         args.adapter = os.path.join(
             config["training"]["output_dir"],

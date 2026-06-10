@@ -1,6 +1,7 @@
 import json
 import copy
 import os
+import copy
 from typing import Any, Dict
 import yaml
 
@@ -56,5 +57,59 @@ def apply_lora_rank_override(config, rank=None):
         model_output_dir,
         f"{method}_r{rank}",
     )
+
+    return config
+
+
+def apply_model_override(config, model_key=None):
+    config = copy.deepcopy(config)
+
+    if model_key is None:
+        model_key = config.get("model_key")
+
+    if model_key is None:
+        raise ValueError("model_key is required.")
+
+    models = config.get("models", {})
+
+    if model_key not in models:
+        raise ValueError(
+            f"Unknown model_key: {model_key}. "
+            f"Available models: {list(models.keys())}"
+        )
+
+    model_info = models[model_key]
+
+    config["model_key"] = model_key
+    config.setdefault("model", {})
+    config["model"]["model_name"] = model_info["model_name"]
+    config["model"]["model_short_name"] = model_info["model_short_name"]
+
+    config.setdefault("output", {})
+    config["output"]["model_output_dir"] = (
+        f"src/outputs/{model_info['model_short_name']}"
+    )
+
+    return config
+
+
+def apply_method_override(config, method=None):
+    config = copy.deepcopy(config)
+
+    if method is None:
+        method = config.get("experiment", {}).get("method", "lora")
+
+    if method not in ["lora", "qlora"]:
+        raise ValueError(f"Unsupported method: {method}")
+
+    config.setdefault("experiment", {})
+    config["experiment"]["method"] = method
+
+    config.setdefault("quantization", {})
+
+    if method == "qlora":
+        config["quantization"]["load_in_4bit"] = True
+    else:
+        config["quantization"]["load_in_4bit"] = False
 
     return config

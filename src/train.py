@@ -13,7 +13,15 @@ from transformers import (
 )
 
 from src.utils.dataset_utils import load_gsm8k_for_sft
-from src.utils.io_utils import ensure_dir, load_yaml, save_yaml, apply_lora_rank_override
+from src.utils.io_utils import (
+    ensure_dir,
+    load_yaml,
+    save_yaml,
+    save_json,
+    apply_model_override,
+    apply_method_override,
+    apply_lora_rank_override,
+)
 from src.utils.lora_utils import apply_lora, print_trainable_parameters, get_trainable_parameter_info
 from src.utils.model_utils import load_model_and_tokenizer
 
@@ -88,10 +96,35 @@ def main():
         default=None,
         help="Override LoRA rank r.",
     )
+    parser.add_argument(
+        "--model_key",
+        type=str,
+        default=None,
+        help="Model key, e.g., qwen3_1p7b, qwen3_4b, qwen3_8b.",
+    )
+    parser.add_argument(
+        "--method",
+        type=str,
+        default=None,
+        choices=["lora", "qlora"],
+        help="Fine-tuning method.",
+    )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=None,
+        help="Override learning rate.",
+    )
+    
     args = parser.parse_args()
 
     config = load_yaml(args.config)
+    config = apply_model_override(config, model_key=args.model_key)
+    config = apply_method_override(config, method=args.method)
     config = apply_lora_rank_override(config, rank=args.rank)
+    
+    if args.learning_rate is not None:
+        config["training"]["learning_rate"] = args.learning_rate
 
     seed = config["training"].get("seed", 42)
     set_seed(seed)
