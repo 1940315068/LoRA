@@ -12,6 +12,7 @@ from transformers import (
     TrainingArguments,
 )
 
+from src.utils.prompt_utils import build_qwen3_sft_text
 from src.utils.dataset_utils import load_gsm8k_for_sft
 from src.utils.io_utils import (
     ensure_dir,
@@ -147,7 +148,7 @@ def main():
     print_trainable_parameters(model)
 
     print("Loading dataset...")
-    train_dataset = load_gsm8k_for_sft(config)
+    train_dataset = load_gsm8k_for_sft(config, tokenizer)
 
     print("Tokenizing dataset...")
     max_seq_length = config["training"]["max_seq_length"]

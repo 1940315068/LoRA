@@ -3,30 +3,36 @@ from typing import Dict
 from datasets import Dataset, load_dataset
 
 
-def format_gsm8k_example(example: Dict[str, str]) -> Dict[str, str]:
-    """
-    Convert a GSM8K example into a simple supervised fine-tuning text format.
-
-    For the first experiment, we train on the full text:
-        Question: ...
-        Answer: ...
-    """
+def format_gsm8k_example(example: Dict[str, str], tokenizer) -> Dict[str, str]:
     question = example["question"].strip()
     answer = example["answer"].strip()
 
-    text = (
-        "Solve the following math problem.\n\n"
-        f"Question: {question}\n\n"
-        f"Answer: {answer}"
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                "Solve the following math problem step by step. "
+                "Put the final numerical answer after ####.\n\n"
+                f"{question}"
+            ),
+        },
+        {
+            "role": "assistant",
+            "content": answer,
+        },
+    ]
+
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=False,
+        enable_thinking=False,
     )
 
     return {"text": text}
 
 
-def load_gsm8k_for_sft(config: Dict) -> Dataset:
-    """
-    Load GSM8K and return a dataset with a single 'text' field.
-    """
+def load_gsm8k_for_sft(config: Dict, tokenizer) -> Dataset:
     dataset_name = config["dataset"]["dataset_name"]
     dataset_config = config["dataset"].get("dataset_config", "main")
     split = config["dataset"].get("split", "train")
@@ -39,9 +45,9 @@ def load_gsm8k_for_sft(config: Dict) -> Dataset:
         dataset = dataset.select(range(max_train_samples))
 
     dataset = dataset.map(
-        format_gsm8k_example,
+        lambda example: format_gsm8k_example(example, tokenizer),
         remove_columns=dataset.column_names,
-        desc="Formatting GSM8K examples",
+        desc="Formatting GSM8K SFT examples",
     )
 
     return dataset
