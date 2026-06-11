@@ -55,16 +55,9 @@ def format_gsm8k_prompt(example):
     """
     question = example["question"].strip()
 
-    prompt = (
-        "Solve the following math problem.\n\n"
-        f"Question: {question}\n\n"
-        "Answer:"
-    )
-
     return {
-        "prompt": prompt,
-        "answer": example["answer"].strip(),
         "question": question,
+        "answer": example["answer"].strip(),
     }
 
 

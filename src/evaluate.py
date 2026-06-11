@@ -133,6 +133,33 @@ def generate_answer(
     return output_text
 
 
+def build_qwen3_eval_prompt(tokenizer, question: str) -> str:
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                "Solve the following math problem step by step. "
+                "Put the final numerical answer after ####.\n\n"
+                f"{question}"
+            ),
+        }
+    ]
+
+    try:
+        return tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
+        )
+    except TypeError:
+        return tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -236,7 +263,10 @@ def main():
 
     print("Generating answers...")
     for example in tqdm(dataset):
-        prompt = example["prompt"]
+        prompt = build_qwen3_eval_prompt(
+            tokenizer=tokenizer,
+            question=example["question"],
+        )
         gold = example["answer"]
 
         pred = generate_answer(
