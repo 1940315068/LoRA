@@ -13,7 +13,7 @@ from transformers import (
 )
 
 from src.utils.prompt_utils import build_qwen3_sft_text
-from src.utils.dataset_utils import load_gsm8k_for_sft
+from src.utils.dataset_utils import load_dataset_for_sft
 from src.utils.io_utils import (
     ensure_dir,
     load_yaml,
@@ -22,6 +22,8 @@ from src.utils.io_utils import (
     apply_model_override,
     apply_method_override,
     apply_lora_rank_override,
+    apply_output_dir,
+    infer_dataset_task,
 )
 from src.utils.lora_utils import apply_lora, print_trainable_parameters, get_trainable_parameter_info
 from src.utils.model_utils import load_model_and_tokenizer
@@ -123,6 +125,7 @@ def main():
     config = apply_model_override(config, model_key=args.model_key)
     config = apply_method_override(config, method=args.method)
     config = apply_lora_rank_override(config, rank=args.rank)
+    config = apply_output_dir(config)
     
     if args.learning_rate is not None:
         config["training"]["learning_rate"] = args.learning_rate
@@ -147,8 +150,20 @@ def main():
     model = apply_lora(model, config)
     print_trainable_parameters(model)
 
-    print("Loading dataset...")
-    train_dataset = load_gsm8k_for_sft(config, tokenizer)
+    dataset_cfg = config.get("dataset", {})
+    task_name = infer_dataset_task(config)
+    dataset_name = dataset_cfg.get("dataset_name", "unknown")
+    dataset_config = dataset_cfg.get("dataset_config", None)
+    split = dataset_cfg.get("split", "train")
+
+    print(
+        f"Loading {task_name} dataset: "
+        f"name={dataset_name}, config={dataset_config}, split={split}"
+    )
+
+    train_dataset = load_dataset_for_sft(config, tokenizer)
+
+    print(f"Loaded train examples: {len(train_dataset)}")
 
     print("Tokenizing dataset...")
     max_seq_length = config["training"]["max_seq_length"]

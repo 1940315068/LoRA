@@ -1,8 +1,8 @@
 import json
 import copy
 import os
-import copy
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
 import yaml
 
 
@@ -31,7 +31,106 @@ def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def apply_lora_rank_override(config, rank=None):
+# ============================================================
+# Dataset / output path helpers
+# ============================================================
+
+def infer_dataset_task(config: Dict[str, Any]) -> str:
+    """
+    Infer dataset task from config.
+
+    Preferred:
+        dataset:
+          task: math
+
+    Fallback:
+        infer from dataset.dataset_name.
+    """
+    dataset_cfg = config.get("dataset", {})
+    task = dataset_cfg.get("task", None)
+
+    if task is not None:
+        return str(task).lower()
+
+    dataset_name = str(dataset_cfg.get("dataset_name", "")).lower()
+
+    if "gsm8k" in dataset_name:
+        return "gsm8k"
+
+    if "math" in dataset_name:
+        return "math"
+
+    raise ValueError("Cannot infer dataset task. Please set dataset.task.")
+
+
+def get_model_output_dir(config: Dict[str, Any]) -> str:
+    """
+    Return the root output dir for a model + dataset.
+
+    GSM8K:
+        src/outputs/qwen3_1p7b
+
+    MATH:
+        src/outputs/qwen3_1p7b/math
+    """
+    model_short_name = config["model"]["model_short_name"]
+    task_name = infer_dataset_task(config)
+
+    if task_name == "gsm8k":
+        return f"src/outputs/{model_short_name}"
+
+    return f"src/outputs/{model_short_name}/{task_name}"
+
+
+def get_experiment_output_dir(config: Dict[str, Any]) -> str:
+    """
+    Return output dir for LoRA/QLoRA experiment.
+
+    Example:
+        src/outputs/qwen3_1p7b/math/lora_r16
+    """
+    model_output_dir = get_model_output_dir(config)
+    method = config.get("experiment", {}).get("method", "lora")
+    rank = config["lora"]["r"]
+
+    return os.path.join(model_output_dir, f"{method}_r{rank}")
+
+
+def get_base_eval_output_dir(config: Dict[str, Any]) -> str:
+    """
+    Return output dir for base model evaluation.
+
+    Example:
+        src/outputs/qwen3_1p7b/math/base
+    """
+    return os.path.join(get_model_output_dir(config), "base")
+
+
+def apply_output_dir(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Apply unified output dirs after model/method/rank overrides.
+
+    This should be called after:
+        apply_model_override
+        apply_method_override
+        apply_lora_rank_override
+    """
+    config = copy.deepcopy(config)
+
+    config.setdefault("output", {})
+    config.setdefault("training", {})
+
+    config["output"]["model_output_dir"] = get_model_output_dir(config)
+    config["training"]["output_dir"] = get_experiment_output_dir(config)
+
+    return config
+
+
+# ============================================================
+# Config override helpers
+# ============================================================
+
+def apply_lora_rank_override(config, rank: Optional[int] = None):
     """
     Apply LoRA rank override and automatically set experiment name/output_dir.
     """
@@ -48,15 +147,9 @@ def apply_lora_rank_override(config, rank=None):
     experiment_name = f"{model_tag}_{method}_r{rank}"
     config["experiment_name"] = experiment_name
 
-    model_output_dir = config.get("output", {}).get(
-        "model_output_dir",
-        f"src/outputs/{model_tag}",
-    )
-
-    config["training"]["output_dir"] = os.path.join(
-        model_output_dir,
-        f"{method}_r{rank}",
-    )
+    config.setdefault("output", {})
+    config["output"]["model_output_dir"] = get_model_output_dir(config)
+    config["training"]["output_dir"] = get_experiment_output_dir(config)
 
     return config
 
@@ -86,9 +179,7 @@ def apply_model_override(config, model_key=None):
     config["model"]["model_short_name"] = model_info["model_short_name"]
 
     config.setdefault("output", {})
-    config["output"]["model_output_dir"] = (
-        f"src/outputs/{model_info['model_short_name']}"
-    )
+    config["output"]["model_output_dir"] = get_model_output_dir(config)
 
     return config
 

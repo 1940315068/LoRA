@@ -8,7 +8,7 @@ from peft import PeftModel
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from src.utils.dataset_utils import load_gsm8k_for_eval
+from src.utils.dataset_utils import load_dataset_for_eval
 from src.utils.io_utils import (
     ensure_dir,
     load_yaml,
@@ -17,11 +17,17 @@ from src.utils.io_utils import (
     apply_model_override,
     apply_method_override,
     apply_lora_rank_override,
+    apply_output_dir,
+    infer_dataset_task,
+    get_base_eval_output_dir,
+    get_experiment_output_dir,
 )
 from src.utils.model_utils import get_torch_dtype, load_base_model, load_tokenizer
 from src.utils.eval_utils import (
     is_correct,
+    is_correct_math,
     extract_final_number,
+    extract_math_final_answer,
     reset_peak_gpu_memory,
     get_peak_gpu_memory_gb,
 )
@@ -53,27 +59,15 @@ def load_model_for_eval(config, adapter_path: str = None):
 def get_eval_output_paths(config, adapter_path: str = None):
     """
     Decide where to save evaluation results.
-
-    Base model results are shared under:
-        src/outputs/qwen3_1p7b/base/
-
-    LoRA results are saved under the current experiment output dir:
-        src/outputs/qwen3_1p7b/lora_rxx/
     """
     if adapter_path is None:
-        model_output_dir = config.get("output", {}).get("model_output_dir")
-
-        if model_output_dir is None:
-            # fallback: parent dir of training output
-            model_output_dir = os.path.dirname(config["training"]["output_dir"])
-
-        output_dir = os.path.join(model_output_dir, "base")
+        output_dir = get_base_eval_output_dir(config)
         eval_output_path = os.path.join(output_dir, "eval_results.json")
         pred_output_path = os.path.join(output_dir, "predictions.jsonl")
         model_type = "base"
 
     else:
-        output_dir = config["training"]["output_dir"]
+        output_dir = get_experiment_output_dir(config)
         eval_output_path = os.path.join(output_dir, "lora_eval_results.json")
         pred_output_path = os.path.join(output_dir, "lora_predictions.jsonl")
         model_type = "lora"
@@ -133,15 +127,23 @@ def generate_answer(
     return output_text
 
 
-def build_qwen3_eval_prompt(tokenizer, question: str) -> str:
+def build_qwen3_eval_prompt(tokenizer, question: str, dataset_name: str = "gsm8k") -> str:
+    if dataset_name == "math":
+        instruction = (
+            "Solve the following competition math problem step by step. "
+            "The final answer may be a number, expression, interval, set, or LaTeX expression. "
+            "Put only the final answer after ####.\n\n"
+        )
+    else:
+        instruction = (
+            "Solve the following math problem step by step. "
+            "Put the final numerical answer after ####.\n\n"
+        )
+
     messages = [
         {
             "role": "user",
-            "content": (
-                "Solve the following math problem step by step. "
-                "Put the final numerical answer after ####.\n\n"
-                f"{question}"
-            ),
+            "content": instruction + question,
         }
     ]
 
@@ -205,6 +207,7 @@ def main():
     config = apply_model_override(config, model_key=args.model_key)
     config = apply_method_override(config, method=args.method)
     config = apply_lora_rank_override(config, rank=args.rank)
+    config = apply_output_dir(config)
     if args.adapter is None and args.rank is not None:
         args.adapter = os.path.join(
             config["training"]["output_dir"],
@@ -241,8 +244,20 @@ def main():
 
     model, tokenizer = load_model_for_eval(config, args.adapter)
 
-    print("Loading GSM8K test set...")
-    dataset = load_gsm8k_for_eval(config)
+    dataset_cfg = config.get("dataset", {})
+    task_name = infer_dataset_task(config)
+    dataset_name = dataset_cfg.get("dataset_name", "unknown")
+    dataset_config = dataset_cfg.get("dataset_config", None)
+    eval_split = config.get("evaluation", {}).get("split", "test")
+
+    print(
+        f"Loading {task_name} eval set: "
+        f"name={dataset_name}, config={dataset_config}, split={eval_split}"
+    )
+
+    dataset = load_dataset_for_eval(config)
+
+    print(f"Loaded eval examples: {len(dataset)}")
 
     eval_cfg = config.get("evaluation", {})
     max_new_tokens = eval_cfg.get("max_new_tokens", 256)
@@ -266,6 +281,7 @@ def main():
         prompt = build_qwen3_eval_prompt(
             tokenizer=tokenizer,
             question=example["question"],
+            dataset_name=task_name,
         )
         gold = example["answer"]
 
@@ -279,7 +295,14 @@ def main():
             max_input_length=max_input_length,
         )
 
-        ok = is_correct(pred, gold)
+        if task_name in ["math", "hendrycks_math"]:
+            ok = is_correct_math(pred, gold)
+            gold_final = extract_math_final_answer(gold)
+            pred_final = extract_math_final_answer(pred)
+        else:
+            ok = is_correct(pred, gold)
+            gold_final = extract_final_number(gold)
+            pred_final = extract_final_number(pred)
 
         total += 1
         correct += int(ok)
@@ -290,8 +313,8 @@ def main():
                 "prompt": prompt,
                 "gold_answer": gold,
                 "prediction": pred,
-                "gold_final": extract_final_number(gold),
-                "pred_final": extract_final_number(pred),
+                "gold_final": gold_final,
+                "pred_final": pred_final,
                 "correct": ok,
             }
         )
