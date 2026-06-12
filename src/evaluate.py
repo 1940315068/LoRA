@@ -26,8 +26,12 @@ from src.utils.model_utils import get_torch_dtype, load_base_model, load_tokeniz
 from src.utils.eval_utils import (
     is_correct,
     is_correct_math,
+    is_correct_optmath,
     extract_final_number,
     extract_math_final_answer,
+    extract_python_code,
+    run_python_code,
+    extract_optimal_value,
     reset_peak_gpu_memory,
     get_peak_gpu_memory_gb,
 )
@@ -128,7 +132,14 @@ def generate_answer(
 
 
 def build_qwen3_eval_prompt(tokenizer, question: str, dataset_name: str = "gsm8k") -> str:
-    if dataset_name == "math":
+    if dataset_name == "optmath":
+        instruction = (
+            "Write executable Python code using gurobipy to formulate and solve "
+            "the following optimization problem. "
+            "At the end, print the optimal objective value exactly in this format:\n"
+            "OPTIMAL_VALUE: <value>\n\n"
+        )
+    elif dataset_name == "math":
         instruction = (
             "Solve the following competition math problem step by step. "
             "The final answer may be a number, expression, interval, set, or LaTeX expression. "
@@ -271,6 +282,8 @@ def main():
     total = 0
     correct = 0
     predictions = []
+    code_generated_count = 0
+    code_executed_count = 0
 
     reset_peak_gpu_memory()
 
@@ -299,25 +312,96 @@ def main():
             ok = is_correct_math(pred, gold)
             gold_final = extract_math_final_answer(gold)
             pred_final = extract_math_final_answer(pred)
-        else:
+
+            code = None
+            run_result = None
+            code_generated = None
+            code_executed = None
+            judge_reason = "math_text_match"
+
+        elif task_name == "optmath":
+            code = extract_python_code(pred)
+            code_generated = code is not None
+
+            if code_generated:
+                timeout = eval_cfg.get("execution_timeout", 100)
+                run_result = run_python_code(code, timeout=timeout)
+                code_executed = run_result["executed"]
+                pred_final = extract_optimal_value(run_result["stdout"])
+                code_generated_count += int(code_generated)
+                code_executed_count += int(code_executed)
+            else:
+                run_result = {
+                    "executed": False,
+                    "timeout": False,
+                    "returncode": None,
+                    "stdout": "",
+                    "stderr": "No Python code generated.",
+                }
+                code_executed = False
+                pred_final = None
+
+            gold_final = gold
+            tolerance = eval_cfg.get("numerical_tolerance", 0.05)
+            ok = is_correct_optmath(pred_final, gold_final, tolerance=tolerance)
+
+            if ok:
+                judge_reason = "correct"
+            elif not code_generated:
+                judge_reason = "no_code_generated"
+            elif not code_executed:
+                judge_reason = "execution_failed"
+            elif pred_final is None:
+                judge_reason = "no_objective_value"
+            else:
+                judge_reason = "wrong_objective_value"
+
+        elif task_name == "gsm8k":
             ok = is_correct(pred, gold)
             gold_final = extract_final_number(gold)
             pred_final = extract_final_number(pred)
 
+            code = None
+            run_result = None
+            code_generated = None
+            code_executed = None
+            judge_reason = "numeric_match"
+
+        else:
+            raise ValueError(f"Unsupported eval task: {task_name}")
+
         total += 1
         correct += int(ok)
 
-        predictions.append(
-            {
-                "question": example["question"],
-                "prompt": prompt,
-                "gold_answer": gold,
-                "prediction": pred,
-                "gold_final": gold_final,
-                "pred_final": pred_final,
-                "correct": ok,
-            }
-        )
+        if task_name == "optmath":
+            code_generated_count += int(code_generated)
+            code_executed_count += int(code_executed)
+
+        item = {
+            "question": example["question"],
+            "prompt": prompt,
+            "gold_answer": gold,
+            "prediction": pred,
+            "gold_final": gold_final,
+            "pred_final": pred_final,
+            "correct": ok,
+        }
+
+        if task_name == "optmath":
+            item.update(
+                {
+                    "generated_code": code,
+                    "code_generated": code_generated,
+                    "code_executed": code_executed,
+                    "execution_stdout": run_result["stdout"],
+                    "execution_stderr": run_result["stderr"],
+                    "execution_returncode": run_result["returncode"],
+                    "execution_timeout": run_result["timeout"],
+                    "judge_reason": judge_reason,
+                }
+            )
+
+        predictions.append(item)
 
     if torch.cuda.is_available():
         torch.cuda.synchronize()
@@ -345,6 +429,18 @@ def main():
         "do_sample": do_sample,
         "temperature": temperature,
     }
+
+    if task_name == "optmath":
+        results.update(
+            {
+                "code_generated": code_generated_count,
+                "code_executed": code_executed_count,
+                "generation_success_rate": code_generated_count / total if total > 0 else 0.0,
+                "execution_success_rate": code_executed_count / total if total > 0 else 0.0,
+                "numerical_tolerance": eval_cfg.get("numerical_tolerance", 0.05),
+                "execution_timeout": eval_cfg.get("execution_timeout", 100),
+            }
+        )
 
     save_json(results, eval_output_path)
 

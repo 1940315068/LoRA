@@ -325,11 +325,157 @@ def load_math_for_eval(config: Dict) -> Dataset:
 
 
 # ============================================================
+# OptMATH
+# ============================================================
+
+def get_optmath_question(example: Dict) -> str:
+    """
+    Robustly get OptMATH question text from different possible schemas.
+    """
+    question = (
+        example.get("en_question")
+        or example.get("question")
+        or example.get("input")
+        or ""
+    )
+    return str(question).strip()
+
+
+def get_optmath_answer(example: Dict) -> str:
+    """
+    Robustly get OptMATH gold answer from different possible schemas.
+    """
+    answer = (
+        example.get("en_answer")
+        or example.get("answer")
+        or ""
+    )
+    return str(answer).strip()
+
+
+def format_optmath_prompt(example: Dict) -> Dict[str, str]:
+    """
+    Format OptMATH example for evaluation.
+    Output schema is aligned with GSM8K/MATH:
+        question
+        answer
+    """
+    return {
+        "question": get_optmath_question(example),
+        "answer": get_optmath_answer(example),
+    }
+
+
+def load_optmath_for_eval(config: Dict) -> Dataset:
+    dataset_name = config["dataset"]["dataset_name"]
+    dataset_config = config["dataset"].get("dataset_config", None)
+
+    eval_split = config.get("evaluation", {}).get("split", "test")
+    max_eval_samples = config.get("evaluation", {}).get("max_eval_samples", 100)
+
+    if dataset_config is None:
+        dataset = load_dataset(dataset_name, split=eval_split)
+    else:
+        dataset = load_dataset(dataset_name, dataset_config, split=eval_split)
+
+    if max_eval_samples is not None:
+        max_eval_samples = min(max_eval_samples, len(dataset))
+        dataset = dataset.select(range(max_eval_samples))
+
+    dataset = dataset.map(
+        format_optmath_prompt,
+        remove_columns=dataset.column_names,
+        desc="Formatting OptMATH eval examples",
+    )
+
+    return dataset
+
+
+def format_optmath_example(example: Dict, tokenizer) -> Dict[str, str]:
+    """
+    Format OptMATH example for SFT.
+
+    Expected common schema:
+        instruction
+        input
+        output
+
+    Fallback:
+        question / en_question
+        answer / en_answer
+    """
+    instruction = str(
+        example.get("instruction")
+        or "Build and solve the optimization model for the following problem using gurobipy."
+    ).strip()
+
+    question = get_optmath_question(example)
+
+    assistant_content = str(
+        example.get("output")
+        or example.get("response")
+        or example.get("solution")
+        or get_optmath_answer(example)
+    ).strip()
+
+    user_content = instruction
+
+    if question:
+        user_content += "\n\n" + question
+
+    messages = [
+        {
+            "role": "user",
+            "content": user_content,
+        },
+        {
+            "role": "assistant",
+            "content": assistant_content,
+        },
+    ]
+
+    text = apply_chat_template(
+        tokenizer=tokenizer,
+        messages=messages,
+        add_generation_prompt=False,
+    )
+
+    return {"text": text}
+
+
+def load_optmath_for_sft(config: Dict, tokenizer) -> Dataset:
+    dataset_name = config["dataset"]["dataset_name"]
+    dataset_config = config["dataset"].get("dataset_config", None)
+    split = config["dataset"].get("split", "train")
+    max_train_samples = config["dataset"].get("max_train_samples", None)
+
+    if dataset_config is None:
+        dataset = load_dataset(dataset_name, split=split)
+    else:
+        dataset = load_dataset(dataset_name, dataset_config, split=split)
+
+    if max_train_samples is not None:
+        max_train_samples = min(max_train_samples, len(dataset))
+        dataset = dataset.select(range(max_train_samples))
+
+    dataset = dataset.map(
+        lambda example: format_optmath_example(example, tokenizer),
+        remove_columns=dataset.column_names,
+        desc="Formatting OptMATH SFT examples",
+    )
+
+    return dataset
+
+
+# ============================================================
 # Generic dispatchers
 # ============================================================
 
 def load_dataset_for_sft(config: Dict, tokenizer) -> Dataset:
     task = infer_dataset_task(config)
+
+    if task == "optmath":
+        return load_optmath_for_sft(config, tokenizer)
 
     if task == "gsm8k":
         return load_gsm8k_for_sft(config, tokenizer)
@@ -342,6 +488,9 @@ def load_dataset_for_sft(config: Dict, tokenizer) -> Dataset:
 
 def load_dataset_for_eval(config: Dict) -> Dataset:
     task = infer_dataset_task(config)
+
+    if task == "optmath":
+        return load_optmath_for_eval(config)
 
     if task == "gsm8k":
         return load_gsm8k_for_eval(config)

@@ -54,6 +54,9 @@ def infer_dataset_task(config: Dict[str, Any]) -> str:
 
     dataset_name = str(dataset_cfg.get("dataset_name", "")).lower()
 
+    if "optmath" in dataset_name:
+        return "optmath"
+
     if "gsm8k" in dataset_name:
         return "gsm8k"
 
