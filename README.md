@@ -41,6 +41,18 @@ src/configs/qwen3_optmath.yaml
 
 Use `--config` to choose which config file to run.
 
+
+## Setup
+
+Create a Python 3.11 environment and install dependencies:
+
+```bash
+conda create -n lora python=3.11
+conda activate lora
+
+pip install -r requirements.txt
+```
+
 ## Train
 
 Example:
@@ -60,7 +72,7 @@ Training options:
 --config          Path to config yaml.
 --model_key       Model key, e.g. qwen3_1p7b, qwen3_4b, qwen3_8b.
 --method          Fine-tuning method: lora or qlora.
---rank            LoRA rank.
+--rank            LoRA/QLoRA rank.
 --learning_rate   Learning rate for training.
 ```
 
@@ -106,8 +118,7 @@ Evaluate options:
 --config         Path to config yaml.
 --model_key      Model key, e.g. qwen3_1p7b, qwen3_4b, qwen3_8b.
 --method         Fine-tuning method: lora or qlora.
---rank           LoRA rank.
---evaluate_base  Evaluate the base model without loading any LoRA / QLoRA adapter.
+--rank           LoRA/QLoRA rank.
 ```
 
 Evaluate the base model:
@@ -116,29 +127,11 @@ Evaluate the base model:
 python -m src.evaluate \
   --config src/configs/qwen3_math.yaml \
   --model_key qwen3_8b \
-  --evaluate_base
+  --method lora
 ```
 
-When using `--evaluate_base`, no `--method` or `--rank` is needed.
+When evaluating the base model, no `--rank` is needed.
 
-## Run Experiments in Batch
-
-Run training and evaluation for multiple models, methods, and ranks:
-
-```bash
-bash src/run_exps.sh \
-  --models qwen3_1p7b,qwen3_4b,qwen3_8b \
-  --methods lora,qlora \
-  --ranks 4,8,16,32,64
-```
-
-Batch script options:
-
-```text
---models    Comma-separated model keys.
---methods   Comma-separated methods.
---ranks     Comma-separated LoRA ranks.
-```
 
 ## Summarize Results
 
@@ -146,14 +139,14 @@ Summarize evaluation results under one model output directory:
 
 ```bash
 python -m src.summarize_results \
-  --output_root src/outputs/qwen3_8b
+  --output_root src/outputs/qwen3_8b/optmath
 ```
 
 Optional filters:
 
 ```bash
 python -m src.summarize_results \
-  --output_root src/outputs/qwen3_8b \
+  --output_root src/outputs/qwen3_8b/optmath \
   --methods qlora \
   --ranks 4 16 64
 ```
@@ -172,27 +165,18 @@ Compute effective rank for one adapter:
 
 ```bash
 python -m src.compute_effective_rank \
-  --adapter src/outputs/qwen3_8b/qlora_r16/adapter
-```
-
-Run rank analysis in batch:
-
-```bash
-bash src/run_rank_analysis.sh \
-  --models qwen3_1p7b qwen3_4b qwen3_8b \
-  --methods lora qlora \
-  --ranks 4 8 16 32 64
+  --adapter src/outputs/qwen3_8b/optmath/qlora_r16/adapter
 ```
 
 Summarize rank results:
 
 ```bash
 python -m src.summarize_rank \
-  --output_root src/outputs/qwen3_8b
+  --output_root src/outputs/qwen3_8b/optmath
 ```
 
 This creates:
 
 ```text
-src/outputs/qwen3_8b/effective_rank_summary.csv
+src/outputs/qwen3_8b/optmath/effective_rank_summary.csv
 ```
