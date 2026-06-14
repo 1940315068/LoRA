@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODELS=("qwen3_1p7b")
 METHODS=("lora" "qlora")
-RANKS=(4 8 16 32 64)
+RANKS=(2 4 8 16 32 64)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 for MODEL in "${MODELS[@]}"; do
-  OUTPUT_ROOT="src/outputs/${MODEL}"
+  OUTPUT_ROOT="src/outputs/optmath/${MODEL}"
 
   echo "============================================================"
   echo "Model: ${MODEL}"

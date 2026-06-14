@@ -190,7 +190,7 @@ def main():
         "--ranks",
         type=int,
         nargs="+",
-        default=[4, 8, 16, 32, 64],
+        default=[2, 4, 8, 16, 32, 64],
     )
 
     parser.add_argument(

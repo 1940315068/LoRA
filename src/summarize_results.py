@@ -43,6 +43,8 @@ def collect_base_result(output_root: str) -> Optional[Dict[str, Any]]:
         "method": "base",
         "rank": "",
         "accuracy": safe_get(base_eval, "accuracy"),
+        "generation_success_rate": safe_get(base_eval, "generation_success_rate"),
+        "execution_success_rate": safe_get(base_eval, "execution_success_rate"),
         "correct": safe_get(base_eval, "correct"),
         "num_eval_samples": safe_get(base_eval, "num_eval_samples"),
         "train_loss": "",
@@ -75,7 +77,9 @@ def collect_method_result(output_root: str, method: str, rank: int) -> Dict[str,
     exp_dir = os.path.join(output_root, f"{method}_r{rank}")
 
     train_path = os.path.join(exp_dir, "train_results.json")
-    eval_path = os.path.join(exp_dir, "lora_eval_results.json")
+    eval_path = os.path.join(exp_dir, f"{method}_eval_results.json")
+    if not os.path.exists(eval_path):
+        eval_path = os.path.join(exp_dir, "lora_eval_results.json")
 
     train_result = load_json(train_path)
     eval_result = load_json(eval_path)
@@ -84,6 +88,8 @@ def collect_method_result(output_root: str, method: str, rank: int) -> Dict[str,
         "method": method,
         "rank": rank,
         "accuracy": safe_get(eval_result, "accuracy"),
+        "generation_success_rate": safe_get(eval_result, "generation_success_rate"),
+        "execution_success_rate": safe_get(eval_result, "execution_success_rate"),
         "correct": safe_get(eval_result, "correct"),
         "num_eval_samples": safe_get(eval_result, "num_eval_samples"),
         "train_loss": safe_get(train_result, "train_loss"),
@@ -112,6 +118,8 @@ def save_csv(rows: List[Dict[str, Any]], output_path: str) -> None:
         "method",
         "rank",
         "accuracy",
+        "generation_success_rate",
+        "execution_success_rate",
         "correct",
         "num_eval_samples",
         "train_loss",
@@ -143,11 +151,13 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
     """
     Print a compact summary table in terminal.
     """
-    print("=" * 120)
+    print("=" * 140)
     print(
         f"{'Method':<8} "
         f"{'Rank':<6} "
         f"{'Acc':<10} "
+        f"{'GenRate':<10} "
+        f"{'ExecRate':<10} "
         f"{'TrainLoss':<12} "
         f"{'TrainTime':<12} "
         f"{'EvalTime':<12} "
@@ -155,13 +165,15 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
         f"{'EvalMem':<12} "
         f"{'TrainableParams':<16}"
     )
-    print("-" * 120)
+    print("-" * 140)
 
     for row in rows:
         print(
             f"{row['method']:<8} "
             f"{str(row['rank']):<6} "
             f"{format_float(row['accuracy']):<10} "
+            f"{format_float(row.get('generation_success_rate')):<10} "
+            f"{format_float(row.get('execution_success_rate')):<10} "
             f"{format_float(row['train_loss']):<12} "
             f"{format_float(row['train_runtime'], 1):<12} "
             f"{format_float(row['eval_runtime'], 1):<12} "
@@ -170,7 +182,7 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
             f"{str(row['trainable_params']):<16}"
         )
 
-    print("=" * 120)
+    print("=" * 140)
 
 
 def main():
@@ -192,7 +204,7 @@ def main():
         "--ranks",
         type=int,
         nargs="+",
-        default=[4, 8, 16, 32, 64],
+        default=[2, 4, 8, 16, 32, 64],
         help="Ranks to summarize.",
     )
     parser.add_argument(

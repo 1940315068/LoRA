@@ -71,10 +71,11 @@ def get_eval_output_paths(config, adapter_path: str = None):
         model_type = "base"
 
     else:
+        method = config.get("experiment", {}).get("method", "lora")
         output_dir = get_experiment_output_dir(config)
-        eval_output_path = os.path.join(output_dir, "lora_eval_results.json")
-        pred_output_path = os.path.join(output_dir, "lora_predictions.jsonl")
-        model_type = "lora"
+        eval_output_path = os.path.join(output_dir, f"{method}_eval_results.json")
+        pred_output_path = os.path.join(output_dir, f"{method}_predictions.jsonl")
+        model_type = method
 
     return model_type, output_dir, eval_output_path, pred_output_path
 
@@ -328,8 +329,6 @@ def main():
                 run_result = run_python_code(code, timeout=timeout)
                 code_executed = run_result["executed"]
                 pred_final = extract_optimal_value(run_result["stdout"])
-                code_generated_count += int(code_generated)
-                code_executed_count += int(code_executed)
             else:
                 run_result = {
                     "executed": False,

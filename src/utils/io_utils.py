@@ -71,18 +71,15 @@ def get_model_output_dir(config: Dict[str, Any]) -> str:
     Return the root output dir for a model + dataset.
 
     GSM8K:
-        src/outputs/qwen3_1p7b
+        src/outputs/gsm8k/qwen3_1p7b
 
-    MATH:
-        src/outputs/qwen3_1p7b/math
+    OptMATH:
+        src/outputs/Optmath/qwen3_1p7b
     """
     model_short_name = config["model"]["model_short_name"]
     task_name = infer_dataset_task(config)
 
-    if task_name == "gsm8k":
-        return f"src/outputs/{model_short_name}"
-
-    return f"src/outputs/{model_short_name}/{task_name}"
+    return f"src/outputs/{task_name}/{model_short_name}"
 
 
 def get_experiment_output_dir(config: Dict[str, Any]) -> str:
@@ -90,7 +87,7 @@ def get_experiment_output_dir(config: Dict[str, Any]) -> str:
     Return output dir for LoRA/QLoRA experiment.
 
     Example:
-        src/outputs/qwen3_1p7b/math/lora_r16
+        src/outputs/math/qwen3_1p7b/lora_r16
     """
     model_output_dir = get_model_output_dir(config)
     method = config.get("experiment", {}).get("method", "lora")
@@ -104,7 +101,7 @@ def get_base_eval_output_dir(config: Dict[str, Any]) -> str:
     Return output dir for base model evaluation.
 
     Example:
-        src/outputs/qwen3_1p7b/math/base
+        src/outputs/math/qwen3_1p7b/base
     """
     return os.path.join(get_model_output_dir(config), "base")
 

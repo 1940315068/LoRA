@@ -30,7 +30,7 @@ dataset:
   dataset_name: Aurora-Gem/OptMATH-Train
   dataset_config: null
   split: train
-  max_train_samples: 2000
+  max_train_samples: 4000
 
 lora:
   r: 16
@@ -57,7 +57,7 @@ training:
 
 evaluation:
   split: train
-  max_eval_samples: 50
+  max_eval_samples: 100
   max_new_tokens: 2048
   max_input_length: 4096
   temperature: 0.0
