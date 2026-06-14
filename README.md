@@ -91,13 +91,13 @@ lora qlora
 Outputs are saved under:
 
 ```text
-src/outputs/<model_key>/<task_name>/<method>_r<rank>/
+src/outputs/<task_name>/<model_key>/<method>_r<rank>/
 ```
 
 For example:
 
 ```text
-src/outputs/qwen3_8b/optmath/lora_r16/
+src/outputs/optmath/qwen3_8b/lora_r16/
 ```
 
 ## Evaluate
@@ -139,14 +139,14 @@ Summarize evaluation results under one model output directory:
 
 ```bash
 python -m src.summarize_results \
-  --output_root src/outputs/qwen3_8b/optmath
+  --output_root src/outputs/optmath/qwen3_8b
 ```
 
 Optional filters:
 
 ```bash
 python -m src.summarize_results \
-  --output_root src/outputs/qwen3_8b/optmath \
+  --output_root src/outputs/optmath/qwen3_8b \
   --methods qlora \
   --ranks 4 16 64
 ```
@@ -165,18 +165,18 @@ Compute effective rank for one adapter:
 
 ```bash
 python -m src.compute_effective_rank \
-  --adapter src/outputs/qwen3_8b/optmath/qlora_r16/adapter
+  --adapter src/outputs/optmath/qwen3_8b/qlora_r16/adapter
 ```
 
 Summarize rank results:
 
 ```bash
 python -m src.summarize_rank \
-  --output_root src/outputs/qwen3_8b/optmath
+  --output_root src/outputs/optmath/qwen3_8b
 ```
 
 This creates:
 
 ```text
-src/outputs/qwen3_8b/optmath/effective_rank_summary.csv
+src/outputs/optmath/qwen3_8b/effective_rank_summary.csv
 ```

@@ -1,0 +1,21 @@
+{
+  "experiment_name": "qwen3_4b_base",
+  "model_type": "base",
+  "adapter": null,
+  "num_eval_samples": 100,
+  "correct": 31,
+  "accuracy": 0.31,
+  "eval_runtime": 3666.1094558238983,
+  "eval_samples_per_second": 0.027276872446113758,
+  "avg_generation_time_per_sample": 36.661094558238986,
+  "peak_gpu_memory_gb": 8.240610122680664,
+  "max_new_tokens": 2048,
+  "do_sample": false,
+  "temperature": 0.0,
+  "code_generated": 100,
+  "code_executed": 42,
+  "generation_success_rate": 1.0,
+  "execution_success_rate": 0.42,
+  "numerical_tolerance": 0.05,
+  "execution_timeout": 100
+}

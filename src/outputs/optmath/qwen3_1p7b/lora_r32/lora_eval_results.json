@@ -1,0 +1,21 @@
+{
+  "experiment_name": "qwen3_1p7b_lora_r32",
+  "model_type": "lora",
+  "adapter": "src/outputs/qwen3_1p7b/optmath/lora_r32/adapter",
+  "num_eval_samples": 50,
+  "correct": 17,
+  "accuracy": 0.34,
+  "eval_runtime": 2306.969789505005,
+  "eval_samples_per_second": 0.021673452434211656,
+  "avg_generation_time_per_sample": 46.139395790100096,
+  "peak_gpu_memory_gb": 3.7952651977539062,
+  "max_new_tokens": 2048,
+  "do_sample": false,
+  "temperature": 0.0,
+  "code_generated": 50,
+  "code_executed": 28,
+  "generation_success_rate": 1.0,
+  "execution_success_rate": 0.56,
+  "numerical_tolerance": 0.05,
+  "execution_timeout": 100
+}

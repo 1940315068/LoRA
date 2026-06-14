@@ -1,0 +1,21 @@
+{
+  "experiment_name": "qwen3_8b_qlora_r16",
+  "model_type": "lora",
+  "adapter": "src/outputs/optmath/qwen3_8b/qlora_r16/adapter",
+  "num_eval_samples": 100,
+  "correct": 59,
+  "accuracy": 0.59,
+  "eval_runtime": 7978.661189079285,
+  "eval_samples_per_second": 0.012533431064459038,
+  "avg_generation_time_per_sample": 79.78661189079284,
+  "peak_gpu_memory_gb": 6.547044277191162,
+  "max_new_tokens": 2048,
+  "do_sample": false,
+  "temperature": 0.0,
+  "code_generated": 100,
+  "code_executed": 69,
+  "generation_success_rate": 1.0,
+  "execution_success_rate": 0.69,
+  "numerical_tolerance": 0.05,
+  "execution_timeout": 100
+}
