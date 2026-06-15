@@ -46,16 +46,13 @@ def get_lora_base_key(key: str, lora_name: str) -> Optional[str]:
 
     base_model.model.model.layers.0.self_attn.q_proj
     """
-    marker = f".{lora_name}."
+    pattern = rf"^(.*)\.{re.escape(lora_name)}(?:\.default)?(?:\.weight)?$"
+    match = re.match(pattern, key)
 
-    if marker in key:
-        return key.split(marker)[0]
+    if match is None:
+        return None
 
-    suffix = f".{lora_name}.weight"
-    if key.endswith(suffix):
-        return key[: -len(suffix)]
-
-    return None
+    return match.group(1)
 
 
 def pair_lora_matrices(
@@ -64,15 +61,20 @@ def pair_lora_matrices(
     pairs = defaultdict(dict)
 
     for key, value in state_dict.items():
-        if "lora_A" in key and key.endswith("weight"):
+        if "lora_A" in key:
             base_key = get_lora_base_key(key, "lora_A")
             if base_key is not None:
                 pairs[base_key]["A"] = value
 
-        elif "lora_B" in key and key.endswith("weight"):
+        elif "lora_B" in key:
             base_key = get_lora_base_key(key, "lora_B")
             if base_key is not None:
                 pairs[base_key]["B"] = value
+
+        elif "lora_E" in key:
+            base_key = get_lora_base_key(key, "lora_E")
+            if base_key is not None:
+                pairs[base_key]["E"] = value
 
     complete_pairs = {}
 
@@ -98,6 +100,7 @@ def compute_singular_values_from_lora(
     lora_A: torch.Tensor,
     lora_B: torch.Tensor,
     scaling: float,
+    lora_E: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """
     LoRA update:
@@ -126,6 +129,18 @@ def compute_singular_values_from_lora(
 
     if A.shape[0] != B.shape[1]:
         raise ValueError(f"Incompatible LoRA shapes: A={A.shape}, B={B.shape}")
+
+    if lora_E is not None:
+        E = lora_E.detach().float().cpu().reshape(-1)
+
+        if E.numel() != A.shape[0]:
+            raise ValueError(
+                f"Incompatible AdaLoRA E shape: E={tuple(lora_E.shape)}, "
+                f"expected rank={A.shape[0]}"
+            )
+
+        # AdaLoRA update: DeltaW = scaling * B @ diag(E) @ A
+        B = B * E.unsqueeze(0)
 
     _, r_B = torch.linalg.qr(B, mode="reduced")
     _, r_A = torch.linalg.qr(A.T, mode="reduced")
@@ -209,11 +224,19 @@ def analyze_lora_pair(
     lora_B: torch.Tensor,
     scaling: float,
     energy_thresholds: List[float],
+    lora_E: Optional[torch.Tensor] = None,
 ) -> Dict[str, Any]:
     singular_values = compute_singular_values_from_lora(
         lora_A=lora_A,
         lora_B=lora_B,
         scaling=scaling,
+        lora_E=lora_E,
+    )
+
+    nominal_rank = int(lora_A.shape[0])
+    entropy_effective_rank = compute_entropy_effective_rank(singular_values)
+    normalized_entropy_effective_rank = (
+        entropy_effective_rank / nominal_rank if nominal_rank > 0 else 0.0
     )
 
     result = {
@@ -222,10 +245,11 @@ def analyze_lora_pair(
         "projection": parse_projection_name(module_name),
         "shape_A": list(lora_A.shape),
         "shape_B": list(lora_B.shape),
-        "nominal_rank": int(lora_A.shape[0]),
+        "shape_E": list(lora_E.shape) if lora_E is not None else None,
+        "nominal_rank": nominal_rank,
         "scaling": float(scaling),
-        "entropy_effective_rank": compute_entropy_effective_rank(singular_values),
-        "normalized_entropy_effective_rank": compute_entropy_effective_rank(singular_values) / int(lora_A.shape[0]),
+        "entropy_effective_rank": entropy_effective_rank,
+        "normalized_entropy_effective_rank": normalized_entropy_effective_rank,
         "stable_rank": compute_stable_rank(singular_values),
         "numerical_rank": compute_numerical_rank(singular_values),
         "singular_values": [float(x) for x in singular_values.tolist()],
@@ -337,6 +361,7 @@ def analyze_adapter_effective_rank(
             lora_B=matrices["B"],
             scaling=scaling,
             energy_thresholds=energy_thresholds,
+            lora_E=matrices.get("E"),
         )
         module_results.append(result)
 
