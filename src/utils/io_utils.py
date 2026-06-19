@@ -106,6 +106,15 @@ def get_base_eval_output_dir(config: Dict[str, Any]) -> str:
     return os.path.join(get_model_output_dir(config), "base")
 
 
+def get_quantized_base_eval_output_dir(config: Dict[str, Any]) -> str:
+    """
+    Return output dir for quantized base model evaluation.
+
+    Example:
+        src/outputs/math/qwen3_1p7b/quantized_base
+    """
+    return os.path.join(get_model_output_dir(config), "quantized_base")
+
 def apply_output_dir(config: Dict[str, Any]) -> Dict[str, Any]:
     """
     Apply unified output dirs after model/method/rank overrides.

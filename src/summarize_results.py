@@ -63,6 +63,68 @@ def collect_base_result(output_root: str) -> Optional[Dict[str, Any]]:
     return row
 
 
+def collect_quantized_base_result(
+    output_root: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Collect 4-bit quantized base model evaluation result.
+
+    Expected path:
+    src/outputs/<task>/<model>/quantized_base/eval_results.json
+    """
+    eval_path = os.path.join(
+        output_root,
+        "quantized_base",
+        "eval_results.json",
+    )
+
+    if not os.path.exists(eval_path):
+        return None
+
+    eval_result = load_json(eval_path)
+    if eval_result is None:
+        return None
+
+    row = {
+        "method": "quant",
+        "rank": "",
+        "accuracy": safe_get(eval_result, "accuracy"),
+        "generation_success_rate": safe_get(
+            eval_result,
+            "generation_success_rate",
+        ),
+        "execution_success_rate": safe_get(
+            eval_result,
+            "execution_success_rate",
+        ),
+        "correct": safe_get(eval_result, "correct"),
+        "num_eval_samples": safe_get(
+            eval_result,
+            "num_eval_samples",
+        ),
+        "train_loss": "",
+        "train_runtime": "",
+        "eval_runtime": safe_get(
+            eval_result,
+            "eval_runtime",
+        ),
+        "avg_generation_time_per_sample": safe_get(
+            eval_result,
+            "avg_generation_time_per_sample",
+        ),
+        "train_peak_gpu_memory_gb": "",
+        "eval_peak_gpu_memory_gb": safe_get(
+            eval_result,
+            "peak_gpu_memory_gb",
+        ),
+        "trainable_params": 0,
+        "total_params": "",
+        "trainable_ratio": 0,
+    }
+
+    return row
+
+
 def collect_method_result(output_root: str, method: str, rank: int) -> Dict[str, Any]:
     """
     Collect result for one method and one rank.
@@ -231,6 +293,13 @@ def main():
         base_row = collect_base_result(args.output_root)
         if base_row is not None:
             rows.append(base_row)
+            
+    if "qlora" in args.methods:
+        quantized_base_row = collect_quantized_base_result(
+            args.output_root
+        )
+        if quantized_base_row is not None:
+            rows.append(quantized_base_row)
 
     for method in args.methods:
         for rank in args.ranks:

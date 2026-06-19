@@ -20,6 +20,7 @@ from src.utils.io_utils import (
     apply_output_dir,
     infer_dataset_task,
     get_base_eval_output_dir,
+    get_quantized_base_eval_output_dir,
     get_experiment_output_dir,
 )
 from src.utils.model_utils import get_torch_dtype, load_base_model, load_tokenizer
@@ -60,15 +61,24 @@ def load_model_for_eval(config, adapter_path: str = None):
     return model, tokenizer
 
 
-def get_eval_output_paths(config, adapter_path: str = None):
+def get_eval_output_paths(
+    config,
+    adapter_path: str = None,
+    is_quantized_base: bool = False,
+):
     """
     Decide where to save evaluation results.
     """
     if adapter_path is None:
-        output_dir = get_base_eval_output_dir(config)
+        if is_quantized_base:
+            output_dir = get_quantized_base_eval_output_dir(config)
+            model_type = "quantized_base"
+        else:
+            output_dir = get_base_eval_output_dir(config)
+            model_type = "base"
+
         eval_output_path = os.path.join(output_dir, "eval_results.json")
         pred_output_path = os.path.join(output_dir, "predictions.jsonl")
-        model_type = "base"
 
     else:
         method = config.get("experiment", {}).get("method", "lora")
@@ -214,6 +224,11 @@ def main():
         help="Evaluation method.",
     )
     args = parser.parse_args()
+    is_quantized_base = (
+        args.method == "qlora"
+        and args.rank is None
+        and args.adapter is None
+    )
 
     config = load_yaml(args.config)
     config = apply_model_override(config, model_key=args.model_key)
@@ -226,11 +241,15 @@ def main():
             "adapter",
         )
     if args.adapter is None:
-        config["experiment_name"] = f"{config['model']['model_short_name']}_base"
+        suffix = "quantized_base" if is_quantized_base else "base"
+        config["experiment_name"] = (
+            f"{config['model']['model_short_name']}_{suffix}"
+        )
 
     model_type, output_dir, eval_output_path, pred_output_path = get_eval_output_paths(
         config,
         args.adapter,
+        is_quantized_base,
     )
 
     ensure_dir(output_dir)
