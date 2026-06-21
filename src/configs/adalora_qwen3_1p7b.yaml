@@ -1,6 +1,5 @@
 ﻿experiment:
-  model_tag: qwen3_1p7b
-  method: adalora
+  method: adalora          # Uses static per-module rank allocation (no PEFT AdaLoRA).
 
 model:
   model_name: Qwen/Qwen3-1.7B
@@ -18,7 +17,7 @@ dataset:
   max_train_samples: 2000
 
 lora:
-  r: 16
+  r: 16               # Fallback / avg rank; overridden per-module by rank_pattern.
   alpha: 32
   dropout: 0.05
   target_modules:
@@ -27,18 +26,8 @@ lora:
     - v_proj
     - o_proj
 
-adalora:
-  init_r: 128
-  tinit: 200
-  tfinal: 200
-  deltaT: 10
-  beta1: 0.85
-  beta2: 0.85
-  orth_reg_weight: 0.5
-  total_step: 0
-
 training:
-  output_dir: null
+  output_dir: null    # Set automatically by train.py from the run name.
   num_train_epochs: 2
   learning_rate: 2.0e-4
   per_device_train_batch_size: 1
@@ -56,3 +45,19 @@ evaluation:
   max_new_tokens: 128
   temperature: 0.0
   do_sample: false
+
+# Gradient importance analysis settings (used by compute_gradient_importance.py).
+gradient_importance:
+  max_calibration_samples: 64
+  max_seq_length: 512
+  max_spectral_rank: 64
+  svd_niter: 4
+
+# Rank allocation settings (used by create_adalora_rank_config.py).
+adaptive_rank:
+  avg_rank: 16
+  min_rank: 2
+  max_rank: 32
+  rank_step: 2
+  score_mode: output_normalized
+  alpha_ratio: 2.0

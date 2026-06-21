@@ -67,7 +67,10 @@ def get_eval_output_paths(config, adapter_path: str = None):
         model_type = "base"
 
     else:
-        output_dir = config["training"]["output_dir"]
+        # Always derive the save directory from the adapter path itself so that
+        # results land next to the adapter regardless of what training.output_dir
+        # says in the YAML (which may be null for adalora).
+        output_dir = os.path.dirname(os.path.abspath(adapter_path))
         eval_output_path = os.path.join(output_dir, "lora_eval_results.json")
         pred_output_path = os.path.join(output_dir, "lora_predictions.jsonl")
         model_type = "lora"

@@ -1,7 +1,6 @@
 from typing import Dict
 
 from peft import (
-    AdaLoraConfig,
     LoraConfig,
     TaskType,
     get_peft_model,
@@ -12,61 +11,35 @@ from peft import (
 def build_lora_config(config: Dict) -> LoraConfig:
     """
     Build LoRA configuration from YAML config.
+
+    Supports optional rank_pattern / alpha_pattern (for adalora method):
+    if config["lora"]["rank_pattern"] is a non-empty dict, each module
+    gets its own rank as produced by create_adalora_rank_config.py.
     """
     lora_cfg = config["lora"]
 
+    rank_pattern  = lora_cfg.get("rank_pattern")  or {}
+    alpha_pattern = lora_cfg.get("alpha_pattern") or {}
+
     return LoraConfig(
-        r=lora_cfg["r"],
-        lora_alpha=lora_cfg["alpha"],
-        lora_dropout=lora_cfg["dropout"],
+        r=int(lora_cfg["r"]),
+        lora_alpha=int(lora_cfg["alpha"]),
+        lora_dropout=float(lora_cfg.get("dropout", 0.05)),
         target_modules=lora_cfg["target_modules"],
         bias="none",
         task_type=TaskType.CAUSAL_LM,
-    )
-
-
-def build_adalora_config(config: Dict) -> AdaLoraConfig:
-    """
-    Build AdaLoRA configuration from YAML config.
-    """
-    lora_cfg = config["lora"]
-    adalora_cfg = config.get("adalora", {})
-
-    target_r = int(lora_cfg["r"])
-    default_init_r = max(target_r, 12)
-    tinit = int(adalora_cfg.get("tinit", 200))
-    tfinal = int(adalora_cfg.get("tfinal", 200))
-    configured_total_step = int(adalora_cfg.get("total_step", 0) or 0)
-
-    # PEFT validates total_step during config construction. Use a minimal
-    # compatible placeholder and let train.py overwrite it with Trainer max_steps.
-    min_valid_total_step = tinit + tfinal + 1
-    total_step = (
-        configured_total_step
-        if configured_total_step > 0
-        else max(min_valid_total_step, 1000)
-    )
-
-    return AdaLoraConfig(
-        target_r=target_r,
-        init_r=int(adalora_cfg.get("init_r", default_init_r)),
-        lora_alpha=lora_cfg["alpha"],
-        lora_dropout=lora_cfg["dropout"],
-        target_modules=lora_cfg["target_modules"],
-        orth_reg_weight=float(adalora_cfg.get("orth_reg_weight", 0.5)),
-        tinit=tinit,
-        tfinal=tfinal,
-        deltaT=int(adalora_cfg.get("deltaT", 10)),
-        beta1=float(adalora_cfg.get("beta1", 0.85)),
-        beta2=float(adalora_cfg.get("beta2", 0.85)),
-        total_step=total_step,
-        task_type=TaskType.CAUSAL_LM,
+        rank_pattern=rank_pattern,
+        alpha_pattern=alpha_pattern,
     )
 
 
 def apply_lora(model, config: Dict):
     """
     Attach LoRA adapters to the base model.
+
+    Works for method = lora | qlora | adalora.
+    AdaLoRA uses a standard LoraConfig with per-module rank_pattern
+    (no PEFT AdaLoraConfig; no dynamic rank pruning during training).
     """
     quant_cfg = config.get("quantization", {})
     load_in_4bit = quant_cfg.get("load_in_4bit", False)
@@ -77,13 +50,7 @@ def apply_lora(model, config: Dict):
             gradient_checkpointing_kwargs={"use_reentrant": False},
         )
 
-    method = config.get("experiment", {}).get("method", "lora")
-
-    if method == "adalora":
-        lora_config = build_adalora_config(config)
-    else:
-        lora_config = build_lora_config(config)
-
+    lora_config = build_lora_config(config)
     model = get_peft_model(model, lora_config)
 
     return model

@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import random
 from typing import Dict
@@ -9,7 +10,6 @@ from src.utils.dataset_utils import load_gsm8k_for_sft
 import torch
 from transformers import (
     DataCollatorForLanguageModeling,
-    TrainerCallback,
     Trainer,
     TrainingArguments,
 )
@@ -18,53 +18,6 @@ from src.utils.io_utils import ensure_dir, load_yaml, save_yaml, apply_lora_rank
 from src.utils.lora_utils import apply_lora, print_trainable_parameters, get_trainable_parameter_info
 from src.utils.model_utils import load_model_and_tokenizer
 
-
-class AdaLoraUpdateCallback(TrainerCallback):
-    """
-    Update AdaLoRA rank allocation during training steps.
-    """
-
-    def on_pre_optimizer_step(self, args, state, control, model=None, **kwargs):
-        if model is None:
-            return control
-
-        base_model = getattr(model, "base_model", None)
-        updater = getattr(base_model, "update_and_allocate", None)
-
-        if callable(updater):
-            updater(int(state.global_step))
-
-        return control
-
-
-def maybe_set_adalora_total_step(model, trainer, config: Dict) -> None:
-    """
-    Set AdaLoRA total steps using Trainer computed max_steps if needed.
-    """
-    method = config.get("experiment", {}).get("method", "lora")
-    if method != "adalora":
-        return
-
-    peft_config = getattr(model, "peft_config", None)
-    if peft_config is None:
-        return
-
-    default_cfg = peft_config.get("default")
-    if default_cfg is None:
-        return
-
-    total_step = int(getattr(default_cfg, "total_step", 0) or 0)
-    if total_step <= 1:
-        default_cfg.total_step = int(trainer.state.max_steps)
-
-
-def maybe_add_adalora_callback(trainer: Trainer, config: Dict) -> None:
-    """
-    Register AdaLoRA update callback only when method is adalora.
-    """
-    method = config.get("experiment", {}).get("method", "lora")
-    if method == "adalora":
-        trainer.add_callback(AdaLoraUpdateCallback())
 
 def set_seed(seed: int) -> None:
     """
@@ -135,12 +88,56 @@ def main():
         "--rank",
         type=int,
         default=None,
-        help="Override LoRA rank r.",
+        help="Override LoRA rank r.  Not used when --method adalora.",
+    )
+    parser.add_argument(
+        "--adaptive_rank_config",
+        type=str,
+        default=None,
+        help=(
+            "Path to rank config JSON from create_adalora_rank_config.py. "
+            "Required when method=adalora."
+        ),
     )
     args = parser.parse_args()
 
     config = load_yaml(args.config)
-    config = apply_lora_rank_override(config, rank=args.rank)
+    method = config.get("experiment", {}).get("method", "lora")
+
+    if method == "adalora":
+        # ----------------------------------------------------------------
+        # AdaLoRA: static per-module rank allocation from pre-computed JSON.
+        # The base model runs in full precision (no 4-bit quantization).
+        # ----------------------------------------------------------------
+        if args.adaptive_rank_config is None:
+            raise ValueError(
+                "--adaptive_rank_config is required when method=adalora. "
+                "Run src/compute_gradient_importance.py then "
+                "src/create_adalora_rank_config.py first."
+            )
+        with open(args.adaptive_rank_config, "r", encoding="utf-8") as f:
+            rank_meta = json.load(f)
+
+        rank_pattern  = {k: int(v) for k, v in rank_meta["rank_pattern"].items()}
+        alpha_pattern = {k: int(v) for k, v in rank_meta["alpha_pattern"].items()}
+        avg_rank = int(rank_meta["avg_rank_target"])
+
+        config.setdefault("lora", {})
+        config["lora"]["r"]             = avg_rank
+        config["lora"]["alpha"]         = avg_rank * 2
+        config["lora"]["rank_pattern"]  = rank_pattern
+        config["lora"]["alpha_pattern"] = alpha_pattern
+
+        # Build experiment name and output dir.
+        model_tag   = config["model"].get("model_short_name", "model")
+        score_mode  = rank_meta.get("score_mode", "gradient_svd")
+        run_name    = f"adalora_avg{avg_rank}_{score_mode}"
+        config["experiment_name"] = run_name
+        config["training"]["output_dir"] = os.path.join(
+            config["output"]["model_output_dir"], run_name
+        )
+    else:
+        config = apply_lora_rank_override(config, rank=args.rank)
 
     seed = config["training"].get("seed", 42)
     set_seed(seed)
@@ -187,9 +184,6 @@ def main():
         data_collator=data_collator,
         processing_class=tokenizer,
     )
-
-    maybe_set_adalora_total_step(model, trainer, config)
-    maybe_add_adalora_callback(trainer, config)
 
     print("Starting training...")
 

@@ -65,14 +65,13 @@ def collect_method_result(output_root: str, method: str, rank: int) -> Dict[str,
     """
     Collect result for one method and one rank.
 
-    Expected:
-        src/outputs/qwen3_1p7b/lora_r16/train_results.json
-        src/outputs/qwen3_1p7b/lora_r16/lora_eval_results.json
-
-        src/outputs/qwen3_1p7b/qlora_r16/train_results.json
-        src/outputs/qwen3_1p7b/qlora_r16/lora_eval_results.json
+    LoRA / QLoRA:  {output_root}/{method}_r{rank}/
+    AdaLoRA:       {output_root}/adalora_avg{rank}_output_normalized/
     """
-    exp_dir = os.path.join(output_root, f"{method}_r{rank}")
+    if method == "adalora":
+        exp_dir = os.path.join(output_root, f"adalora_avg{rank}_output_normalized")
+    else:
+        exp_dir = os.path.join(output_root, f"{method}_r{rank}")
 
     train_path = os.path.join(exp_dir, "train_results.json")
     eval_path = os.path.join(exp_dir, "lora_eval_results.json")
@@ -81,7 +80,7 @@ def collect_method_result(output_root: str, method: str, rank: int) -> Dict[str,
     eval_result = load_json(eval_path)
 
     row = {
-        "method": method,
+        "method": method if method != "adalora" else f"adalora_avg{rank}",
         "rank": rank,
         "accuracy": safe_get(eval_result, "accuracy"),
         "correct": safe_get(eval_result, "correct"),

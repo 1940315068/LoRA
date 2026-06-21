@@ -25,11 +25,11 @@ def collect_effective_rank_result(
     method: str,
     rank: int,
 ) -> Optional[Dict[str, Any]]:
-    path = os.path.join(
-        output_root,
-        f"{method}_r{rank}",
-        "effective_rank.json",
-    )
+    if method == "adalora":
+        exp_dir = os.path.join(output_root, f"adalora_avg{rank}_output_normalized")
+    else:
+        exp_dir = os.path.join(output_root, f"{method}_r{rank}")
+    path = os.path.join(exp_dir, "effective_rank.json")
 
     report = load_json(path)
 
@@ -40,7 +40,7 @@ def collect_effective_rank_result(
     by_projection = report.get("by_projection", {})
 
     row = {
-        "method": method,
+        "method": method if method != "adalora" else f"adalora_avg{rank}",
         "rank": rank,
         "num_lora_modules": report.get("num_lora_modules"),
         "mean_rank_90": aggregate.get("mean_rank_90"),
