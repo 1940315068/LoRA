@@ -37,6 +37,7 @@ from src.utils.eval_utils import (
     get_peak_gpu_memory_gb,
 )
 
+
 def get_model_device(model):
     """
     Return the device of the first model parameter.
@@ -82,9 +83,22 @@ def get_eval_output_paths(
 
     else:
         method = config.get("experiment", {}).get("method", "lora")
-        output_dir = get_experiment_output_dir(config)
-        eval_output_path = os.path.join(output_dir, f"{method}_eval_results.json")
-        pred_output_path = os.path.join(output_dir, f"{method}_predictions.jsonl")
+
+        # For AdaQLoRA, the output directory is determined by run_name
+        # or inferred from the explicitly provided adapter path.
+        output_dir = config.get("training", {}).get("output_dir")
+
+        if output_dir is None:
+            output_dir = get_experiment_output_dir(config)
+
+        eval_output_path = os.path.join(
+            output_dir,
+            f"{method}_eval_results.json",
+        )
+        pred_output_path = os.path.join(
+            output_dir,
+            f"{method}_predictions.jsonl",
+        )
         model_type = method
 
     return model_type, output_dir, eval_output_path, pred_output_path
@@ -142,7 +156,11 @@ def generate_answer(
     return output_text
 
 
-def build_qwen3_eval_prompt(tokenizer, question: str, dataset_name: str = "gsm8k") -> str:
+def build_qwen3_eval_prompt(
+    tokenizer,
+    question: str,
+    dataset_name: str = "gsm8k",
+) -> str:
     if dataset_name == "optmath":
         instruction = (
             "Write executable Python code using gurobipy to formulate and solve "
@@ -182,10 +200,11 @@ def build_qwen3_eval_prompt(tokenizer, question: str, dataset_name: str = "gsm8k
             tokenize=False,
             add_generation_prompt=True,
         )
-        
+
 
 def main():
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
         "--config",
         type=str,
@@ -207,7 +226,7 @@ def main():
         "--rank",
         type=int,
         default=None,
-        help="Override LoRA rank r.",
+        help="Override LoRA rank r. Only used by LoRA and QLoRA.",
     )
     parser.add_argument(
         "--model_key",
@@ -215,41 +234,178 @@ def main():
         default=None,
         help="Model key, e.g., qwen3_1p7b, qwen3_4b, qwen3_8b.",
     )
-
     parser.add_argument(
         "--method",
         type=str,
         default=None,
-        choices=["lora", "qlora"],
+        choices=["lora", "qlora", "adaqlora"],
         help="Evaluation method.",
     )
+    parser.add_argument(
+        "--run_name",
+        type=str,
+        default=None,
+        help=(
+            "Experiment directory name. "
+            "Required for AdaQLoRA when --adapter is not provided."
+        ),
+    )
+
     args = parser.parse_args()
+
+    config = load_yaml(args.config)
+
+    config = apply_model_override(
+        config,
+        model_key=args.model_key,
+    )
+
+    method = (
+        args.method
+        or config.get("experiment", {}).get("method")
+        or "lora"
+    )
+
+    config = apply_method_override(
+        config,
+        method=method,
+    )
+
+    # ------------------------------------------------------------------
+    # Configure experiment and adapter paths
+    # ------------------------------------------------------------------
+    if method == "adaqlora":
+        if args.rank is not None:
+            raise ValueError(
+                "--rank should not be used with --method adaqlora. "
+                "AdaQLoRA ranks are stored in the adapter configuration."
+            )
+
+        output_root = config.get(
+            "output",
+            {},
+        ).get("model_output_dir")
+
+        if args.run_name is not None:
+            if output_root is None:
+                raise KeyError(
+                    "config['output']['model_output_dir'] is required "
+                    "when --run_name is provided."
+                )
+
+            output_dir = os.path.join(
+                output_root,
+                args.run_name,
+            )
+
+            config["training"]["output_dir"] = output_dir
+            config["experiment_name"] = args.run_name
+
+            if args.adapter is None:
+                args.adapter = os.path.join(
+                    output_dir,
+                    "adapter",
+                )
+
+        elif args.adapter is not None:
+            normalized_adapter_path = os.path.normpath(
+                args.adapter
+            )
+
+            # Normally:
+            #
+            # experiment_dir/
+            #   adapter/
+            #
+            # Therefore the experiment output directory is the
+            # parent directory of the adapter directory.
+            output_dir = os.path.dirname(
+                normalized_adapter_path
+            )
+
+            config["training"]["output_dir"] = output_dir
+            config["experiment_name"] = os.path.basename(
+                output_dir
+            )
+
+        else:
+            raise ValueError(
+                "AdaQLoRA evaluation requires either "
+                "--run_name or --adapter."
+            )
+
+    else:
+        config = apply_lora_rank_override(
+            config,
+            rank=args.rank,
+        )
+
+        config = apply_output_dir(config)
+
+        # Optional custom experiment directory for LoRA/QLoRA.
+        if args.run_name is not None:
+            output_root = config.get(
+                "output",
+                {},
+            ).get("model_output_dir")
+
+            if output_root is None:
+                raise KeyError(
+                    "config['output']['model_output_dir'] is required "
+                    "when --run_name is provided."
+                )
+
+            output_dir = os.path.join(
+                output_root,
+                args.run_name,
+            )
+
+            config["training"]["output_dir"] = output_dir
+            config["experiment_name"] = args.run_name
+
+        if args.adapter is None and args.rank is not None:
+            args.adapter = os.path.join(
+                config["training"]["output_dir"],
+                "adapter",
+            )
+
+        if (
+            args.adapter is None
+            and args.run_name is not None
+        ):
+            args.adapter = os.path.join(
+                config["training"]["output_dir"],
+                "adapter",
+            )
+
+    if args.adapter is not None and not os.path.isdir(args.adapter):
+        raise FileNotFoundError(
+            f"Adapter directory not found: {args.adapter}"
+        )
+
     is_quantized_base = (
-        args.method == "qlora"
+        method == "qlora"
         and args.rank is None
         and args.adapter is None
     )
 
-    config = load_yaml(args.config)
-    config = apply_model_override(config, model_key=args.model_key)
-    config = apply_method_override(config, method=args.method)
-    config = apply_lora_rank_override(config, rank=args.rank)
-    config = apply_output_dir(config)
-    if args.adapter is None and args.rank is not None:
-        args.adapter = os.path.join(
-            config["training"]["output_dir"],
-            "adapter",
-        )
     if args.adapter is None:
-        suffix = "quantized_base" if is_quantized_base else "base"
+        suffix = (
+            "quantized_base"
+            if is_quantized_base
+            else "base"
+        )
+
         config["experiment_name"] = (
             f"{config['model']['model_short_name']}_{suffix}"
         )
 
-    model_type, output_dir, eval_output_path, pred_output_path = get_eval_output_paths(
-        config,
-        args.adapter,
-        is_quantized_base,
+    model_type, output_dir, eval_output_path, pred_output_path = (
+        get_eval_output_paths(
+            config,
+            args.adapter,
+            is_quantized_base,
+        )
     )
 
     ensure_dir(output_dir)
@@ -260,11 +416,14 @@ def main():
     print(f"Adapter path: {args.adapter}")
     print("=" * 80)
 
-    if args.adapter is None and os.path.exists(eval_output_path) and not args.overwrite:
+    if (
+        os.path.exists(eval_output_path)
+        and not args.overwrite
+    ):
         print("=" * 80)
-        print("Base evaluation already exists. Skipping.")
+        print("Evaluation result already exists. Skipping.")
         print(f"Existing result: {eval_output_path}")
-        print("Use --overwrite to rerun base evaluation.")
+        print("Use --overwrite to rerun evaluation.")
         print("=" * 80)
         return
 
@@ -273,13 +432,28 @@ def main():
     else:
         print("Loading base model only...")
 
-    model, tokenizer = load_model_for_eval(config, args.adapter)
+    model, tokenizer = load_model_for_eval(
+        config,
+        args.adapter,
+    )
 
     dataset_cfg = config.get("dataset", {})
     task_name = infer_dataset_task(config)
-    dataset_name = dataset_cfg.get("dataset_name", "unknown")
-    dataset_config = dataset_cfg.get("dataset_config", None)
-    eval_split = config.get("evaluation", {}).get("split", "test")
+    dataset_name = dataset_cfg.get(
+        "dataset_name",
+        "unknown",
+    )
+    dataset_config = dataset_cfg.get(
+        "dataset_config",
+        None,
+    )
+    eval_split = config.get(
+        "evaluation",
+        {},
+    ).get(
+        "split",
+        "test",
+    )
 
     print(
         f"Loading {task_name} eval set: "
@@ -310,6 +484,7 @@ def main():
     start_time = time.time()
 
     print("Generating answers...")
+
     for example in tqdm(dataset):
         prompt = build_qwen3_eval_prompt(
             tokenizer=tokenizer,
@@ -344,10 +519,18 @@ def main():
             code_generated = code is not None
 
             if code_generated:
-                timeout = eval_cfg.get("execution_timeout", 100)
-                run_result = run_python_code(code, timeout=timeout)
+                timeout = eval_cfg.get(
+                    "execution_timeout",
+                    100,
+                )
+                run_result = run_python_code(
+                    code,
+                    timeout=timeout,
+                )
                 code_executed = run_result["executed"]
-                pred_final = extract_optimal_value(run_result["stdout"])
+                pred_final = extract_optimal_value(
+                    run_result["stdout"]
+                )
             else:
                 run_result = {
                     "executed": False,
@@ -360,8 +543,15 @@ def main():
                 pred_final = None
 
             gold_final = gold
-            tolerance = eval_cfg.get("numerical_tolerance", 0.05)
-            ok = is_correct_optmath(pred_final, gold_final, tolerance=tolerance)
+            tolerance = eval_cfg.get(
+                "numerical_tolerance",
+                0.05,
+            )
+            ok = is_correct_optmath(
+                pred_final,
+                gold_final,
+                tolerance=tolerance,
+            )
 
             if ok:
                 judge_reason = "correct"
@@ -386,7 +576,9 @@ def main():
             judge_reason = "numeric_match"
 
         else:
-            raise ValueError(f"Unsupported eval task: {task_name}")
+            raise ValueError(
+                f"Unsupported eval task: {task_name}"
+            )
 
         total += 1
         correct += int(ok)
@@ -428,9 +620,21 @@ def main():
 
     peak_memory_gb = get_peak_gpu_memory_gb()
 
-    accuracy = correct / total if total > 0 else 0.0
-    eval_samples_per_second = total / eval_runtime if eval_runtime > 0 else None
-    avg_generation_time_per_sample = eval_runtime / total if total > 0 else None
+    accuracy = (
+        correct / total
+        if total > 0
+        else 0.0
+    )
+    eval_samples_per_second = (
+        total / eval_runtime
+        if eval_runtime > 0
+        else None
+    )
+    avg_generation_time_per_sample = (
+        eval_runtime / total
+        if total > 0
+        else None
+    )
 
     results = {
         "experiment_name": config["experiment_name"],
@@ -453,32 +657,81 @@ def main():
             {
                 "code_generated": code_generated_count,
                 "code_executed": code_executed_count,
-                "generation_success_rate": code_generated_count / total if total > 0 else 0.0,
-                "execution_success_rate": code_executed_count / total if total > 0 else 0.0,
-                "numerical_tolerance": eval_cfg.get("numerical_tolerance", 0.05),
-                "execution_timeout": eval_cfg.get("execution_timeout", 100),
+                "generation_success_rate": (
+                    code_generated_count / total
+                    if total > 0
+                    else 0.0
+                ),
+                "execution_success_rate": (
+                    code_executed_count / total
+                    if total > 0
+                    else 0.0
+                ),
+                "numerical_tolerance": eval_cfg.get(
+                    "numerical_tolerance",
+                    0.05,
+                ),
+                "execution_timeout": eval_cfg.get(
+                    "execution_timeout",
+                    100,
+                ),
             }
         )
 
     save_json(results, eval_output_path)
 
-    with open(pred_output_path, "w", encoding="utf-8") as f:
+    with open(
+        pred_output_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
         for item in predictions:
-            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(
+                    item,
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
 
     print("=" * 80)
     print("Evaluation finished.")
     print(f"Model type: {model_type}")
-    print(f"Accuracy: {accuracy:.4f} ({correct}/{total})")
-    print(f"Eval runtime: {eval_runtime:.2f} seconds")
-    print(f"Avg generation time/sample: {avg_generation_time_per_sample:.2f} seconds")
-    print(f"Eval samples/second: {eval_samples_per_second:.4f}")
+    print(
+        f"Accuracy: {accuracy:.4f} "
+        f"({correct}/{total})"
+    )
+    print(
+        f"Eval runtime: "
+        f"{eval_runtime:.2f} seconds"
+    )
+
+    if avg_generation_time_per_sample is not None:
+        print(
+            "Avg generation time/sample: "
+            f"{avg_generation_time_per_sample:.2f} seconds"
+        )
+
+    if eval_samples_per_second is not None:
+        print(
+            "Eval samples/second: "
+            f"{eval_samples_per_second:.4f}"
+        )
 
     if peak_memory_gb is not None:
-        print(f"Peak GPU memory: {peak_memory_gb:.2f} GB")
+        print(
+            f"Peak GPU memory: "
+            f"{peak_memory_gb:.2f} GB"
+        )
 
-    print(f"Results saved to: {eval_output_path}")
-    print(f"Predictions saved to: {pred_output_path}")
+    print(
+        f"Results saved to: "
+        f"{eval_output_path}"
+    )
+    print(
+        f"Predictions saved to: "
+        f"{pred_output_path}"
+    )
     print("=" * 80)
 
 

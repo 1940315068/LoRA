@@ -170,6 +170,54 @@ def collect_method_result(output_root: str, method: str, rank: int) -> Dict[str,
     return row
 
 
+def collect_adaptive_result(
+    output_root: str,
+    avg_rank: int,
+) -> Optional[Dict[str, Any]]:
+    """
+    Collect AdaQLoRA result.
+
+    Expected paths:
+        outputs/<task>/<model>/adaqlora_avg8/train_results.json
+        outputs/<task>/<model>/adaqlora_avg8/adaqlora_eval_results.json
+    """
+    exp_dir = os.path.join(output_root, f"adaqlora_avg{avg_rank}")
+
+    train_path = os.path.join(exp_dir, "train_results.json")
+    eval_path = os.path.join(exp_dir, "adaqlora_eval_results.json")
+
+    if not os.path.exists(exp_dir):
+        print(f"[Warning] Missing directory: {exp_dir}")
+        return None
+
+    train_result = load_json(train_path)
+    eval_result = load_json(eval_path)
+
+    if eval_result is None:
+        return None
+
+    row = {
+        "method": "adaqlora",
+        "rank": avg_rank,
+        "accuracy": safe_get(eval_result, "accuracy"),
+        "generation_success_rate": safe_get(eval_result, "generation_success_rate",),
+        "execution_success_rate": safe_get(eval_result, "execution_success_rate"),
+        "correct": safe_get(eval_result, "correct"),
+        "num_eval_samples": safe_get(eval_result, "num_eval_samples"),
+        "train_loss": safe_get(train_result, "train_loss"),
+        "train_runtime": safe_get(train_result, "train_runtime"),
+        "eval_runtime": safe_get(eval_result, "eval_runtime"),
+        "avg_generation_time_per_sample": safe_get(eval_result, "avg_generation_time_per_sample"),
+        "train_peak_gpu_memory_gb": safe_get(train_result, "peak_memory_gb"),
+        "eval_peak_gpu_memory_gb": safe_get(eval_result, "peak_gpu_memory_gb"),
+        "trainable_params": safe_get(train_result, "trainable_params"),
+        "total_params": safe_get(train_result, "total_params"),
+        "trainable_ratio": safe_get(train_result, "trainable_ratio"),
+    }
+
+    return row
+
+
 def save_csv(rows: List[Dict[str, Any]], output_path: str) -> None:
     """
     Save rows to a CSV file.
@@ -215,7 +263,7 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
     """
     print("=" * 140)
     print(
-        f"{'Method':<8} "
+        f"{'Method':<10} "
         f"{'Rank':<6} "
         f"{'Acc':<10} "
         f"{'GenRate':<10} "
@@ -231,7 +279,7 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
 
     for row in rows:
         print(
-            f"{row['method']:<8} "
+            f"{row['method']:<10} "
             f"{str(row['rank']):<6} "
             f"{format_float(row['accuracy']):<10} "
             f"{format_float(row.get('generation_success_rate')):<10} "
@@ -280,6 +328,13 @@ def main():
         action="store_true",
         help="Do not include base model result.",
     )
+    parser.add_argument(
+        "--avg_ranks",
+        type=int,
+        nargs="+",
+        default=[8, 16],
+        help="Average ranks for AdaQLoRA experiments.",
+    )
 
     args = parser.parse_args()
 
@@ -294,7 +349,7 @@ def main():
         if base_row is not None:
             rows.append(base_row)
             
-    if "qlora" in args.methods:
+    if "qlora" in args.methods or "adaqlora" in args.methods:
         quantized_base_row = collect_quantized_base_result(
             args.output_root
         )
@@ -302,9 +357,16 @@ def main():
             rows.append(quantized_base_row)
 
     for method in args.methods:
-        for rank in args.ranks:
-            row = collect_method_result(args.output_root, method, rank)
-            rows.append(row)
+        if method == "adaqlora":
+            for avg_rank in args.avg_ranks:
+                row = collect_adaptive_result(args.output_root, avg_rank)
+                if row is not None:
+                    rows.append(row)
+
+        else:
+            for rank in args.ranks:
+                row = collect_method_result(args.output_root, method, rank)
+                rows.append(row)
 
     save_csv(rows, output_csv)
     print_table(rows)

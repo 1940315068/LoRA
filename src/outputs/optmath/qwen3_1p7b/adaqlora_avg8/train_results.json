@@ -1,0 +1,17 @@
+{
+    "avg_rank_target": 8,
+    "epoch": 2.0,
+    "manual_train_runtime": 2795.7349207401276,
+    "max_adaptive_rank": 16,
+    "method": "adaqlora",
+    "min_adaptive_rank": 2,
+    "peak_memory_gb": 6.41774845123291,
+    "total_flos": 6.788441650583962e+16,
+    "total_params": 1019139072,
+    "train_loss": 0.30784608364105226,
+    "train_runtime": 2795.5512,
+    "train_samples_per_second": 1.431,
+    "train_steps_per_second": 0.179,
+    "trainable_params": 3207168,
+    "trainable_ratio": 0.0031469385171408676
+}

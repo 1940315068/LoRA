@@ -1,4 +1,5 @@
-from typing import Dict
+import json
+from typing import Any, Dict, Optional, Tuple
 
 from peft import (
     LoraConfig,
@@ -14,14 +15,58 @@ def build_lora_config(config: Dict) -> LoraConfig:
     """
     lora_cfg = config["lora"]
 
-    return LoraConfig(
-        r=lora_cfg["r"],
-        lora_alpha=lora_cfg["alpha"],
-        lora_dropout=lora_cfg["dropout"],
-        target_modules=lora_cfg["target_modules"],
-        bias="none",
-        task_type=TaskType.CAUSAL_LM,
+    adaptive_rank_path = lora_cfg.get(
+        "adaptive_rank_config",
+        None,
     )
+
+    rank_pattern = {}
+    alpha_pattern = {}
+
+    if adaptive_rank_path is not None:
+        adaptive_config = load_adaptive_rank_config(
+            adaptive_rank_path
+        )
+
+        rank_pattern = {
+            name: int(rank)
+            for name, rank in adaptive_config[
+                "rank_pattern"
+            ].items()
+        }
+
+        alpha_pattern = {
+            name: int(alpha)
+            for name, alpha in adaptive_config[
+                "alpha_pattern"
+            ].items()
+        }
+
+        print(
+            "Using adaptive rank configuration: "
+            f"{adaptive_rank_path}"
+        )
+        print(
+            "Adaptive rank histogram: "
+            f"{adaptive_config.get('rank_histogram', {})}"
+        )
+
+    lora_config = LoraConfig(
+        r=int(lora_cfg["r"]),
+        lora_alpha=int(
+            lora_cfg["lora_alpha"]
+        ),
+        lora_dropout=float(
+            lora_cfg.get("lora_dropout", 0.0)
+        ),
+        target_modules=lora_cfg["target_modules"],
+        bias=lora_cfg.get("bias", "none"),
+        task_type="CAUSAL_LM",
+
+        rank_pattern=rank_pattern,
+        alpha_pattern=alpha_pattern,
+    )
+    return lora_config
 
 
 def apply_lora(model, config: Dict):
@@ -65,3 +110,22 @@ def get_trainable_parameter_info(model):
         "total_params": total_params,
         "trainable_ratio": trainable_params / total_params,
     }
+
+
+def load_adaptive_rank_config(
+    path: str,
+) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    if "rank_pattern" not in config:
+        raise ValueError(
+            f"No rank_pattern found in {path}"
+        )
+
+    if "alpha_pattern" not in config:
+        raise ValueError(
+            f"No alpha_pattern found in {path}"
+        )
+
+    return config

@@ -193,23 +193,32 @@ def apply_model_override(config, model_key=None):
     return config
 
 
-def apply_method_override(config, method=None):
-    config = copy.deepcopy(config)
-
+def apply_method_override(
+    config,
+    method=None,
+):
     if method is None:
-        method = config.get("experiment", {}).get("method", "lora")
+        return config
 
-    if method not in ["lora", "qlora"]:
-        raise ValueError(f"Unsupported method: {method}")
+    allowed_methods = {
+        "lora",
+        "qlora",
+        "adaqlora",
+    }
+
+    if method not in allowed_methods:
+        raise ValueError(
+            f"Unsupported method: {method}. "
+            f"Expected one of {sorted(allowed_methods)}."
+        )
 
     config.setdefault("experiment", {})
-    config["experiment"]["method"] = method
-
     config.setdefault("quantization", {})
 
-    if method == "qlora":
-        config["quantization"]["load_in_4bit"] = True
-    else:
-        config["quantization"]["load_in_4bit"] = False
+    config["experiment"]["method"] = method
+
+    config["quantization"]["load_in_4bit"] = (
+        method in {"qlora", "adaqlora"}
+    )
 
     return config

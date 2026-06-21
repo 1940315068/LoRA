@@ -1,0 +1,21 @@
+{
+  "experiment_name": "adaqlora_avg16",
+  "model_type": "adaqlora",
+  "adapter": "src/outputs/optmath/qwen3_1p7b/adaqlora_avg16/adapter",
+  "num_eval_samples": 50,
+  "correct": 13,
+  "accuracy": 0.26,
+  "eval_runtime": 4039.358352661133,
+  "eval_samples_per_second": 0.0123782035745999,
+  "avg_generation_time_per_sample": 80.78716705322266,
+  "peak_gpu_memory_gb": 1.8282194137573242,
+  "max_new_tokens": 2048,
+  "do_sample": false,
+  "temperature": 0.0,
+  "code_generated": 50,
+  "code_executed": 21,
+  "generation_success_rate": 1.0,
+  "execution_success_rate": 0.42,
+  "numerical_tolerance": 0.05,
+  "execution_timeout": 100
+}

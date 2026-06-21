@@ -64,3 +64,22 @@ evaluation:
   do_sample: false
   execution_timeout: 100
   numerical_tolerance: 0.05
+
+quantization_analysis:
+  max_calibration_samples: 64
+  max_seq_length: 1024
+  max_tokens_per_sample: 128
+
+  max_spectral_rank: 64
+  svd_niter: 2
+
+adaptive_rank:
+  avg_rank: 16
+  min_rank: 2
+  max_rank: 32
+
+  # Recommended:
+  # Each gain is normalized by the layer output energy.
+  score_mode: output_normalized
+
+  alpha_ratio: 2.0
